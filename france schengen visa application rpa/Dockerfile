@@ -11,12 +11,10 @@ ENV PIP_DEFAULT_TIMEOUT=300
 COPY requirements.txt .
 
 # Install torch (CPU) first so easyocr reuses it – cached layer when only code changes
-RUN --mount=type=cache,id=pip-france,target=/root/.cache/pip \
-    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Install rest of Python deps (easyocr skips torch; pip cache speeds rebuilds)
-RUN --mount=type=cache,id=pip-france,target=/root/.cache/pip \
-    pip install --no-cache-dir -r requirements.txt
+# Install rest of Python deps (easyocr skips torch)
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Single step: Chromium + system deps (faster than two RUNs)
 RUN playwright install chromium --with-deps
