@@ -13,12 +13,17 @@ COPY ["france schengen visa application rpa", "france schengen visa application 
 # Copy Germany app (including output/ for defaults/schema)
 COPY ["germany schengen visa application rpa", "germany schengen visa application rpa"]
 
-# Install Python dependencies
+# Install CPU-only PyTorch first (EasyOCR uses it; CPU build is ~1GB smaller)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# Install Python dependencies (opencv-headless + no GUI deps)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright Chromium (both France and Germany use it)
-RUN playwright install chromium
-RUN playwright install-deps chromium
+# Install Playwright Chromium only (both apps use it)
+RUN playwright install chromium && playwright install-deps chromium
+
+# Shrink image: remove pip and Playwright caches
+RUN rm -rf /root/.cache/pip /root/.cache/ms-playwright 2>/dev/null; true
 
 # Railway: PORT set at runtime; headless for France RPA
 ENV PORT=8000

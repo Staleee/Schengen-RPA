@@ -1,0 +1,17 @@
+# Avoid copying junk into the image (saves GB and build time)
+__MACOSX
+.git
+.gitignore
+*.pyc
+__pycache__
+.venv
+venv
+.env
+*.md
+node_modules
+
+# France: debug output (not needed at runtime)
+france schengen visa application rpa/debug_screenshots
+france schengen visa application rpa/captcha_debug
+
+# Germany: keep output/ (defaults + schema) – don’t ignore
