@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+.git
+.gitignore
+debug_screenshots
+captcha_debug
+*.md
+.env
+.venv
+venv

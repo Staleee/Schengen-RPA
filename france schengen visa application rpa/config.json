@@ -1,0 +1,14 @@
+{
+    "registration": {
+        "last_name": "TEST",
+        "first_name": "USER",
+        "email": "test@example.com",
+        "password": "TestPassword123!",
+        "language": "English"
+    },
+    "settings": {
+        "headless": false,
+        "slow_mo": 100,
+        "timeout": 30000
+    }
+}
