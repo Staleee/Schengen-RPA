@@ -40,6 +40,12 @@ app = FastAPI(
 executor = ThreadPoolExecutor(max_workers=2)
 
 
+@app.get("/")
+async def root():
+    """Root and health probe – Railway can hit / or /health."""
+    return {"status": "ok", "service": "france-visas-automation", "version": "2.0"}
+
+
 # ============== MODELS ==============
 
 class RegistrationRequest(BaseModel):
