@@ -1,26 +1,31 @@
-# France-Visas RPA API – Playwright + EasyOCR
+# France-Visas RPA API – optimized for Railway (faster build, pip cache)
+# syntax=docker/dockerfile:1
 FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
 
 WORKDIR /app
 
+# Longer pip timeout so large packages (torch, easyocr) don't fail
+ENV PIP_DEFAULT_TIMEOUT=300
+
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install torch (CPU) first so easyocr reuses it – cached layer when only code changes
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Install Playwright Chromium (required for browser automation)
-RUN playwright install chromium
-RUN playwright install-deps chromium
+# Install rest of Python deps (easyocr skips torch; pip cache speeds rebuilds)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Single step: Chromium + system deps (faster than two RUNs)
+RUN playwright install chromium --with-deps
+
+# Copy application code last so code changes don't invalidate heavy layers
 COPY . .
 
-# Railway sets PORT; use headless browser in production
 ENV PORT=8000
 ENV HEADLESS=true
-
 EXPOSE 8000
 
-# Run the API server (Railway injects PORT at runtime)
 CMD uvicorn api_server:app --host 0.0.0.0 --port ${PORT}

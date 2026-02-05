@@ -103,6 +103,18 @@ Same pattern: one service per app, each with its own root directory and URL.
 
 ---
 
+### Build timeouts (France / Germany)
+
+Railway limits build time by plan (e.g. **Free: 10 min**, **Hobby: 20 min**). Both Dockerfiles are optimized to finish faster:
+
+- **Pip cache** (`--mount=type=cache`) so rebuilds reuse downloaded packages.
+- **France:** Torch (CPU) installed first so easyocr reuses it; one Playwright step.
+- **Germany:** One Playwright step; pip cache.
+
+If a build still times out, try **Hobby** plan for a longer limit, or trigger a **redeploy** (second build is often faster thanks to cache).
+
+---
+
 ## Part 3: Check it works
 
 | Service | Check |
