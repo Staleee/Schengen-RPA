@@ -7,11 +7,11 @@ WORKDIR /app
 COPY requirements.txt .
 COPY schengen_api.py .
 
-# Copy France app
-COPY "france schengen visa application rpa" "france schengen visa application rpa"
+# Copy France app (JSON form handles paths with spaces)
+COPY ["france schengen visa application rpa", "france schengen visa application rpa"]
 
 # Copy Germany app (including output/ for defaults/schema)
-COPY "germany schengen visa application rpa" "germany schengen visa application rpa"
+COPY ["germany schengen visa application rpa", "germany schengen visa application rpa"]
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
