@@ -1,6 +1,14 @@
 # Schengen RPA – Hosting Checklist
 
-Two services, no code changes. France and Germany each get their own URL and keep their existing endpoints.
+**Three separate services** (each under 4 GB, own URL):
+
+| Service | What it does | Root Directory |
+|--------|----------------|----------------------------------|
+| **France** | France-Visas: register, verify email, login | `france schengen visa application rpa` |
+| **Germany** | VIDEX form: fill application, generate PDF | `germany schengen visa application rpa` |
+| **Documents** (future) | Generate other documents (not Schengen apps) | `document generation rpa` (or similar) |
+
+One repo → one Railway project → one service per app → each gets its own URL. When you add the document service later, you add a third service and point it at that folder.
 
 ---
 
@@ -17,8 +25,6 @@ Two services, no code changes. France and Germany each get their own URL and kee
 
 ### 2. Push your RPAs folder to that repo
 
-Open **PowerShell** or **Command Prompt** and run:
-
 ```powershell
 cd "c:\Users\user\Desktop\maids.cc\RPAs"
 git init
@@ -29,63 +35,92 @@ git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
 git push -u origin main
 ```
 
-Replace `YOUR_USERNAME` and `YOUR_REPO_NAME` with your GitHub username and the repo name you created.
-
-If Git asks you to log in, use a [Personal Access Token](https://github.com/settings/tokens) as the password (not your GitHub password).
+Replace `YOUR_USERNAME` and `YOUR_REPO_NAME`. Use a [Personal Access Token](https://github.com/settings/tokens) as password if Git asks.
 
 ---
 
-## Part 2: Deploy on Railway (one project, two services)
+## Part 2: Deploy on Railway (separate services)
 
-### 3. Create a Railway project from GitHub
+Each app is **one service** with its **own Root Directory**. That way Railway builds **only that folder** for that service – not the whole repo.
+
+---
+
+### ⚠️ Important: Set Root Directory for each service
+
+If you don’t set **Root Directory**, Railway uses the **whole repository** as the build context (and will use the root Dockerfile).  
+**You must set Root Directory** so Railway uses only the folder you want:
+
+- **France service** → Root Directory = `france schengen visa application rpa` (only that folder)
+- **Germany service** → Root Directory = `germany schengen visa application rpa` (only that folder)
+
+**Where to set it on Railway**
+
+1. Click the **service** (the box with the service name).
+2. Open **Settings** (gear icon or “Settings” tab).
+3. Find **“Root Directory”** (sometimes under **Build** or **General**).
+4. In the text field, type **only the folder name**, e.g. `france schengen visa application rpa`.
+   - No leading slash, no path – just that folder name.
+5. Save. Railway will rebuild using **only that folder** (and that folder’s Dockerfile).
+
+**Can’t find Root Directory?** Look under **Settings** → **Build** (or **Source**). It might be called “Root Directory”, “Source Directory”, or “Monorepo path”. Type the folder name exactly as in your repo.
+
+---
+
+### 3. Create a Railway project
 
 1. Go to [railway.app](https://railway.app) → **Login** with GitHub.
-2. Click **New Project**.
-3. Choose **Deploy from GitHub repo**.
-4. Select the repo you just pushed (e.g. `schengen-rpa`).
-5. Railway creates **one** service. We’ll set it to Germany first, then add France.
+2. **New Project** → **Deploy from GitHub repo**.
+3. Select your repo. Railway creates **one** service.
 
-### 4. Configure the first service (Germany)
+### 4. Service 1 – France (only the France folder)
 
 1. Click the service that was created.
-2. Go to **Settings** (or the service’s **⋮** menu) → **General**.
-3. Find **Root Directory**.
-4. Set it to: `germany schengen visa application rpa`
-5. Save. Railway will rebuild.
-6. Go to **Settings** → **Networking** (or **Deploy** tab) → **Generate Domain**.
-7. Copy the URL (e.g. `https://xxx.up.railway.app`). That’s your **Germany** API.
+2. **Settings** → find **Root Directory** → set to: `france schengen visa application rpa`
+3. Save. Railway rebuilds; build context is **only** that folder.
+4. **Settings** → **Networking** → **Generate Domain**.
+5. Copy the URL → that’s your **France** API.
 
-### 5. Add the second service (France)
+### 5. Service 2 – Germany (only the Germany folder)
 
-1. In the **same** project, click **+ New**.
-2. Choose **GitHub Repo**.
-3. Select the **same** repo again.
-4. A second service appears. Click it.
-5. **Settings** → **General** → **Root Directory**.
-6. Set it to: `france schengen visa application rpa`
-7. Save. Railway will rebuild (uses the Dockerfile in that folder).
-8. **Settings** → **Networking** → **Generate Domain**.
-9. Copy the URL. That’s your **France** API.
+1. In the **same** project, click **+ New** → **GitHub Repo**.
+2. Select the **same** repo. A second service is created.
+3. Click that service → **Settings** → **Root Directory** → set to: `germany schengen visa application rpa`
+4. Save. Build context is **only** that folder.
+5. **Settings** → **Networking** → **Generate Domain**.
+6. Copy the URL → that’s your **Germany** API.
+
+### 6. Service 3 – Document generation (later)
+
+When you add the document-generation app:
+
+1. In the repo, create a folder for it (e.g. `document generation rpa` or `documents-rpa`) with its own Dockerfile and app.
+2. Push to GitHub.
+3. In the **same** Railway project: **+ New** → **GitHub Repo** → same repo.
+4. New service → **Settings** → **General** → **Root Directory** = that folder (e.g. `document generation rpa`).
+5. **Generate Domain** → that’s your **Documents** API.
+
+Same pattern: one service per app, each with its own root directory and URL.
 
 ---
 
 ## Part 3: Check it works
 
-| App     | What to open in browser |
-|---------|--------------------------|
-| France  | `https://YOUR-FRANCE-URL/health` → should see `{"status":"ok","service":"france-visas-automation",...}` |
-| France  | `https://YOUR-FRANCE-URL/docs` → Swagger UI |
-| Germany | `https://YOUR-GERMANY-URL/` or `/health` → should see status + usage |
+| Service | Check |
+|--------|--------|
+| France | `https://YOUR-FRANCE-URL/health` → `{"status":"ok","service":"france-visas-automation",...}` |
+| France | `https://YOUR-FRANCE-URL/docs` → Swagger UI |
+| Germany | `https://YOUR-GERMANY-URL/` or `/health` → status + usage |
 
-Endpoints stay as they are in the code (e.g. France: `/register-and-verify`, `/login`; Germany: `/fill`).
+Endpoints stay as in the code (France: `/register-and-verify`, `/login`; Germany: `/fill`).
 
 ---
 
 ## Quick reference
 
-| App     | Root Directory (exactly)              |
-|---------|--------------------------------------|
-| France  | `france schengen visa application rpa` |
-| Germany | `germany schengen visa application rpa` |
+| Service | Root Directory (exactly) | Purpose |
+|--------|---------------------------|--------|
+| France | `france schengen visa application rpa` | France-Visas registration + login |
+| Germany | `germany schengen visa application rpa` | VIDEX form fill + PDF |
+| Documents (future) | e.g. `document generation rpa` | Other document generation |
 
-One repo → one Railway project → two services (one per app) → two URLs. Yalla.
+One repo → one Railway project → **France + Germany now, Documents when you add it**. Yalla.
