@@ -32,17 +32,16 @@ BASE_DIR = Path(__file__).parent.parent
 SCHEMA_PATH = BASE_DIR / "output" / "fields_schema.json"
 
 # Hardcoded defaults – do NOT send these in the request body. We fill them for you.
-# Do NOT remove fields from the request: merged = {**HARDCODED_DEFAULTS, **data} keeps all body keys.
+# marital_status, number_of_entries, passport_type (or arrival/departure) are in the request body.
+# has_residence_permit / residence_in_other_country = "Do you have a residence permit in another country?" (e.g. re-entry); we set true so the residence section is filled.
 HARDCODED_DEFAULTS = {
     "occupation": "Blue-collar worker",
     "reference_type": "Inviting person",
     "purpose_of_visit": "Tourism",
-    "marital_status": "Single",
     "has_residence_permit": True,
     "residence_in_other_country": True,
-    "rvisa_type": "re-entry visa",
-    "passport_type": "Ordinary passport",
-    "number_of_entries": "Single entry",
+    "rvisa_type": "Registration Visa",
+    "passport_type": "Passport",
     "third_party_pays": True,
     "inviter_pays": True,
     "all_expenses_covered": True,
@@ -102,13 +101,10 @@ async def fill_form(data: dict[str, Any]):
         # Start with hardcoded defaults; body only sends what varies (no occupation, reference_type, costs, etc.)
         merged = {**HARDCODED_DEFAULTS, **data}
 
-        # Normalize a few values from body when present
-        rvisa = (merged.get("rvisa_type") or "").strip()
-        if rvisa and ("registration" in rvisa.lower() or rvisa.upper() == "REGISTRATION VISA"):
-            merged["rvisa_type"] = "re-entry visa"
+        # passport_type: default "Passport"; if body has "official" use "Official passport"
         pt = (merged.get("passport_type") or "").strip()
-        if pt and "official" in pt.lower() and "passport" in pt.lower() and "duty" not in pt.lower():
-            merged["passport_type"] = "Official duty passport"
+        if pt and "official" in pt.lower():
+            merged["passport_type"] = "Official passport"
 
         # Employer = client name + client phone (no separate employer in body)
         if not merged.get("employer") or not str(merged.get("employer", "")).strip():
@@ -141,6 +137,11 @@ async def fill_form(data: dict[str, Any]):
         ]:
             if (not merged.get(emp_key) or not str(merged.get(emp_key, "")).strip()) and merged.get(client_key):
                 merged[emp_key] = merged[client_key]
+
+        # Name at birth (geburtsname) = same as family name when not provided
+        family_name = merged.get("maid_surname") or merged.get("surname") or merged.get("family_name")
+        if family_name and (not merged.get("birth_name") and not merged.get("maiden_name")):
+            merged["birth_name"] = family_name
 
         # Translate to German field IDs (no defaults file – we use HARDCODED_DEFAULTS only)
         translator = FieldTranslator(defaults_path=None)

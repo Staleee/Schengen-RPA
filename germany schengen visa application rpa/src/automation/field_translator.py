@@ -114,6 +114,8 @@ ENGLISH_TO_GERMAN = {
     "destination": ["reisedaten.ersteinreiseStaat", "reisedaten.hauptzielListe[0]"],
     "number_of_entries": "visumdaten.anzahlEinreisen",
     "entries": "visumdaten.anzahlEinreisen",
+    "arrival_date": "visumdaten.gueltigkeit.von",
+    "departure_date": "visumdaten.gueltigkeit.bisGenau.value",
     "visa_start_date": "visumdaten.gueltigkeit.von",
     "travel_start_date": "visumdaten.gueltigkeit.von",
     "visa_end_date": "visumdaten.gueltigkeit.bisGenau.value",
@@ -207,7 +209,8 @@ ENGLISH_TO_GERMAN = {
     "other_means": "reisedaten.lebensunterhalt.sonstiges",
     "other_means_specify": "reisedaten.lebensunterhalt.sonstigesAngabe",
     
-    # Biometrics (checkbox + date if known, optional)
+    # Biometrics – "Have your fingerprints been taken before?" (in request body)
+    "fingerprints_taken_before": "antragsteller.biometrie.fingerabdrueckeErfassungsDatum_vorhanden",
     "fingerprints_collected": "antragsteller.biometrie.fingerabdrueckeErfassungsDatum_vorhanden",
     "has_fingerprints": "antragsteller.biometrie.fingerabdrueckeErfassungsDatum_vorhanden",
     "fingerprint_date": "antragsteller.biometrie.fingerabdrueckeErfassungsDatum",

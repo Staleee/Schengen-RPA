@@ -1,2 +1,0 @@
-# VIDEX Form Automation Package
-

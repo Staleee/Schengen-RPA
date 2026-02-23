@@ -256,7 +256,11 @@ class ApplicantDataLoader:
         ]:
             if (not flat_raw.get(emp_key) or not str(flat_raw.get(emp_key, "")).strip()) and flat_raw.get(client_key):
                 flat_raw[emp_key] = flat_raw[client_key]
-        
+        # Name at birth (geburtsname) = same as family name when not provided
+        family_name = flat_raw.get("maid_surname") or flat_raw.get("surname") or flat_raw.get("family_name")
+        if family_name and not flat_raw.get("birth_name") and not flat_raw.get("maiden_name"):
+            flat_raw["birth_name"] = family_name
+
         # Do NOT auto-fill other_means_specify / "Other (please specify)" – only fill when user sends it
         # Translate if using English mode
         if self._translator:

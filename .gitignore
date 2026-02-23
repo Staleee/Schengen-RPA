@@ -1,0 +1,6 @@
+# Other RPA projects (this repo is Schengen-only at root)
+TTLTTE/
+
+# Virtual environments
+.venv/
+venv/
