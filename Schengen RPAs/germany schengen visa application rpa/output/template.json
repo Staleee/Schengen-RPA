@@ -1,0 +1,48 @@
+{
+  "maid_surname": "",
+  "maid_first_name": "",
+  "maid_date_of_birth": "DD.MM.YYYY",
+  "maid_place_of_birth": "",
+  "maid_country_of_birth": "",
+  "maid_gender": "Male | Female",
+  "maid_marital_status": "Single | Married | Divorced | Widowed | Separated",
+  "maid_nationality": "",
+
+  "employer_street": "",
+  "employer_house_number": "",
+  "employer_postal_code": "",
+  "employer_city": "",
+  "employer_country": "",
+
+  "maid_street": "",
+  "maid_house_number": "",
+  "maid_postal_code": "",
+  "maid_city": "",
+  "maid_country": "",
+  "maid_phone_number": "",
+  "maid_email": "",
+
+  "passport_number": "",
+  "passport_issue_date": "DD.MM.YYYY",
+  "passport_expiry_date": "DD.MM.YYYY",
+  "passport_issuing_country": "",
+  "passport_issued_by": "",
+
+  "destination": "Germany",
+  "number_of_entries": "Single entry | Multiple entries",
+  "visa_start_date": "DD.MM.YYYY",
+  "visa_end_date": "DD.MM.YYYY",
+
+  "client_surname": "",
+  "client_first_name": "",
+  "client_gender": "Male | Female",
+  "client_nationality": "",
+  
+  "hotel_street": "",
+  "hotel_house_number": "",
+  "hotel_postal_code": "",
+  "hotel_city": "",
+  "hotel_country": "",
+  "hotel_phone": "",
+  "hotel_email": ""
+}
