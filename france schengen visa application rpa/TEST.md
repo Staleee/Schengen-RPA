@@ -1,5 +1,48 @@
 # Testing the France RPA
 
+## 0a. Full France form (multi-step) – POST /fill-application/full
+
+Use this to run the **entire** France Schengen form (Page 1 → … → Page 5 → Continue → declare → Next).
+
+**Behavior:** If you use `wait_for_manual_login_seconds: 0`, you must already be logged in before calling the API. If the RPA sees the **login page** (connect.france-visas.gouv.fr), it stops and tells you: set `wait_for_manual_login_seconds: 60` (or more), run again, and **log in in the browser** during that wait. The sample body uses 60 so you have time to log in when testing. Section by section: if **any field is skipped** (could not be filled), the RPA **stops immediately**, logs what it sees (section, URL, visible field ids), saves a screenshot, and leaves the **browser open for 120 seconds** so you can inspect (no navigation back). Each field is tried by **id → name → label → placeholder** (fallback); all attempts are logged to the console.
+
+1. Start the server: `python api_server.py` (browser visible).
+2. Open **http://localhost:8000/docs** → **POST /fill-application/full**.
+3. Click "Try it out" and paste the body from **SAMPLE_REQUEST_BODY.json** (or see REQUEST_BODY_REFERENCE.md §5).
+4. Click **Execute**. A Chromium window opens; **log in manually** within the wait time.
+5. The RPA then fills Page 1 (Your Plans), clicks "Verify and then Next", fills Page 2 (Your Information), … through Page 5 (Your contacts), then Continue → declare → popup → Next (download).
+
+Screenshots: `debug_screenshots/france_*.png` (e.g. `france_p1_filled.png`, `france_final.png`).
+
+---
+
+## 0b. Fill application only (no registration/login) – POST /fill-application
+
+To **skip registration and login** and only fill the form as if you're already logged in:
+
+1. Start the server: `python api_server.py` (browser visible).
+2. Open **http://localhost:8000/docs** → **POST /fill-application**.
+3. Click "Try it out" and use a body like:
+
+```json
+{
+  "wait_for_manual_login_seconds": 60,
+  "fields": {
+    "Last name": "Test",
+    "First name": "User",
+    "Email": "you@example.com"
+  }
+}
+```
+
+4. Click **Execute**. A Chromium window opens and goes to France-Visas.
+5. **Log in manually** in that window within 60 seconds (use your real account).
+6. After the wait, the RPA will try to click "New application" (or similar) and fill the `fields` you provided. Keys in `fields` are matched to form labels or input names (e.g. `"Last name"`, `"First name"`, `"lastName"`, etc.).
+
+Screenshots are saved in `debug_screenshots/` (e.g. `fill_step_1_after_manual_login.png`, `fill_step_3_filled.png`).
+
+---
+
 ## 1. Run the API locally (see the browser)
 
 From the **france schengen visa application rpa** folder:
