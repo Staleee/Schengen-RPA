@@ -8,6 +8,9 @@ import zipfile
 from pathlib import Path
 from typing import Dict, List
 
+# XML 1.0 invalid control chars (only \t \n \r are allowed in content)
+_INVALID_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff]")
+
 # Per-document variables (snake_case). Zoho will call each endpoint with its own body.
 COVER_LETTER_VARIABLES = [
     "maid_full_name",
@@ -70,10 +73,18 @@ def _strip_xml_tags(s: str) -> str:
     return re.sub(r"<[^>]+>", "", s)
 
 
+def _sanitize_for_word(value: str) -> str:
+    """Strip characters that break Word's XML (control chars, invalid Unicode)."""
+    if not value:
+        return ""
+    return _INVALID_XML_RE.sub("", value)
+
+
 def _xml_escape(value: str) -> str:
     """Escape value for use inside XML <w:t>."""
+    sanitized = _sanitize_for_word(value)
     return (
-        value.replace("&", "&amp;")
+        sanitized.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
@@ -109,15 +120,19 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
             for name in zin.namelist():
                 data = zin.read(name)
                 if name == "word/document.xml":
-                    xml = data.decode("utf-8")
-                    # Replace each {{...}} (possibly with XML inside) by looking up normalized var name
+                    xml = data.decode("utf-8", errors="replace")
+                    # Replace each {{...}} (possibly with XML inside). Do NOT replace if the match
+                    # spans paragraph boundaries (would create invalid XML and Word "unspecified error").
                     def repl(match):
+                        full = match.group(0)
                         inner = match.group(1)
+                        if "<w:p" in full or "</w:p>" in full:
+                            return full
                         var_name = normalize_key(_strip_xml_tags(inner))
                         if var_name in normalized:
                             filled.append(var_name)
-                            return "<w:r><w:t>" + _xml_escape(normalized[var_name]) + "</w:t></w:r>"
-                        return match.group(0)
+                            return "<w:r><w:t xml:space=\"preserve\">" + _xml_escape(normalized[var_name]) + "</w:t></w:r>"
+                        return full
 
                     xml = _PLACEHOLDER_PATTERN.sub(repl, xml)
                     data = xml.encode("utf-8")
