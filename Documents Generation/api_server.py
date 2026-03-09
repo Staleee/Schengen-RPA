@@ -35,6 +35,19 @@ TEMPLATES = {
 # Only these keys are used for each document; no inference, no guessing.
 MAPPING_PATH = BASE_DIR / "document_mapping.json"
 
+# .docx and .zip both start with ZIP magic bytes; if we send anything else, clients get XML/garbage.
+ZIP_MAGIC = b"PK"
+
+
+def _ensure_zip_content(content: bytes, label: str = "file") -> None:
+    """Raise 500 if content is not a valid ZIP (docx/zip), so we never return XML or garbage."""
+    if not content or not content.startswith(ZIP_MAGIC):
+        start = content[:20] if len(content) >= 20 else content
+        raise HTTPException(
+            status_code=500,
+            detail=f"Generated {label} is not a valid docx/zip (starts with {start!r}). Check template and server.",
+        )
+
 
 def _load_mapping() -> Dict[str, Dict[str, str]]:
     if not MAPPING_PATH.exists():
@@ -130,12 +143,20 @@ async def generate_one(
     path = TEMPLATES[dt]
     if not path.exists():
         raise HTTPException(status_code=500, detail=f"Template not found: {path.name}")
+    # Ensure template is a real .docx (zip), not XML or corrupt
+    try:
+        with zipfile.ZipFile(path, "r") as z:
+            if "word/document.xml" not in z.namelist():
+                raise HTTPException(status_code=500, detail=f"Template {path.name} is not a valid .docx (missing word/document.xml).")
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=500, detail=f"Template {path.name} is not a valid .docx (not a ZIP file). Re-upload a real Word document.")
 
     variables = _variables_for_document(body, dt)
     output = BASE_DIR / "output" / f"filled_{dt}.docx"
     output.parent.mkdir(parents=True, exist_ok=True)
     fill_document(path, variables, output)
     content = output.read_bytes()
+    _ensure_zip_content(content, "docx")
     filename = f"{dt}_letter.docx"
 
     if format and format.lower() == "json":
@@ -151,6 +172,7 @@ async def generate_one(
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Length": str(len(content)),
+            "Cache-Control": "no-transform",
         },
     )
 
@@ -175,6 +197,7 @@ async def generate_all(body: Dict[str, Any], format: Optional[str] = None):
             zf.write(output, f"{name}_letter.docx")
     buf.seek(0)
     content = buf.getvalue()
+    _ensure_zip_content(content, "zip")
     filename = "schengen_documents.zip"
 
     if format and format.lower() == "json":
@@ -190,6 +213,7 @@ async def generate_all(body: Dict[str, Any], format: Optional[str] = None):
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Length": str(len(content)),
+            "Cache-Control": "no-transform",
         },
     )
 
