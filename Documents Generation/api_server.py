@@ -4,6 +4,7 @@ Templates use {{variable_name}} placeholders. Each document has its own request 
 What gets replaced for which document is defined only in document_mapping.json (no guessing).
 """
 
+import base64
 import io
 import json
 import zipfile
@@ -110,11 +111,13 @@ async def get_variables(document_type: Optional[str] = None):
 async def generate_one(
     body: Dict[str, Any],
     document_type: Optional[str] = None,
+    format: Optional[str] = None,
 ):
     """
     Generate one document. Pass document_type in the URL (?document_type=invitation) OR in the body ("document_type": "invitation").
     document_type = invitation | sponsor | cover.
-    Body: flat key-value; keys = normalized bold names (e.g. client_name, applicant_name). Returns the .docx file.
+    Body: flat key-value; keys from document_mapping.json for that document.
+    By default returns the .docx file. Add ?format=json to get JSON with base64 file + filename (so you can save with correct type).
     """
     dt = document_type or body.pop("document_type", None)
     if not dt:
@@ -133,21 +136,31 @@ async def generate_one(
     output.parent.mkdir(parents=True, exist_ok=True)
     fill_document(path, variables, output)
     content = output.read_bytes()
+    filename = f"{dt}_letter.docx"
+
+    if format and format.lower() == "json":
+        return {
+            "filename": filename,
+            "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "content_base64": base64.b64encode(content).decode("ascii"),
+        }
+
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={
-            "Content-Disposition": f"attachment; filename={dt}_letter.docx",
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Length": str(len(content)),
         },
     )
 
 
 @app.post("/generate-all")
-async def generate_all(body: Dict[str, Any]):
+async def generate_all(body: Dict[str, Any], format: Optional[str] = None):
     """
     Generate all three documents from one request body. Each document uses only the keys
     defined for it in document_mapping.json. Returns a ZIP with invitation_letter.docx, sponsor_letter.docx, cover_letter.docx.
+    Add ?format=json to get JSON with base64 zip + filename.
     """
     out_dir = BASE_DIR / "output"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -162,11 +175,20 @@ async def generate_all(body: Dict[str, Any]):
             zf.write(output, f"{name}_letter.docx")
     buf.seek(0)
     content = buf.getvalue()
+    filename = "schengen_documents.zip"
+
+    if format and format.lower() == "json":
+        return {
+            "filename": filename,
+            "content_type": "application/zip",
+            "content_base64": base64.b64encode(content).decode("ascii"),
+        }
+
     return Response(
         content=content,
         media_type="application/zip",
         headers={
-            "Content-Disposition": "attachment; filename=schengen_documents.zip",
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Length": str(len(content)),
         },
     )

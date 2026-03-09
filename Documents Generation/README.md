@@ -34,10 +34,10 @@ uvicorn api_server:app --reload --port 8000
 |--------|------|-------------|
 | GET | `/`, `/health` | Health check |
 | GET | `/variables` | Expected keys + placeholders in file per document. Optional `?document_type=invitation\|sponsor\|cover` |
-| POST | `/generate?document_type=cover` | Cover letter; body = cover variables only. Returns .docx |
-| POST | `/generate?document_type=sponsor` | Sponsor letter; body = sponsor variables only. Returns .docx |
-| POST | `/generate?document_type=invitation` | Invitation letter; body = invitation variables only. Returns .docx |
-| POST | `/generate-all` | Body = union of all variables → ZIP with all three .docx |
+| POST | `/generate?document_type=cover` | Cover letter; body = cover variables. Returns .docx. Add `&format=json` for JSON with base64 file + filename (recommended for Zoho upload/preview). |
+| POST | `/generate?document_type=sponsor` | Sponsor letter; same, use `?format=json` for Zoho. |
+| POST | `/generate?document_type=invitation` | Invitation letter; same, use `?format=json` for Zoho. |
+| POST | `/generate-all` | Body = union of all variables → ZIP. Add `?format=json` for Zoho. |
 
 ---
 
@@ -51,9 +51,10 @@ Each document has its own set of keys. See **REQUEST_BODY.md** for the full list
 
 ---
 
-## Zoho mapping
+## Zoho mapping and upload
 
-See **REQUEST_BODY.md** for the table that maps **request body keys** to **Zoho field names** so you can build the JSON from Zoho and assign values to the correct document fields.
+- **Request body → document fields:** see **REQUEST_BODY.md** and **document_mapping.json**.
+- **Saving the generated file to a Zoho upload field and getting preview to work:** see **ZOHO.md**. Use `?format=json`, then decode the base64 and upload with the returned filename so the file type is correct and Zoho can preview it.
 
 ---
 
