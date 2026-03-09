@@ -46,10 +46,11 @@ def _variables_for_document(body: Dict[str, Any], document_type: str) -> Dict[st
     """Direct exchange: for each key in the mapping for this document, take value from body (or '')."""
     mapping = _load_mapping()
     doc_map = mapping.get(document_type, {})
-    return {
-        normalize_key(request_key): (str(body.get(request_key) or "").strip()
-        for request_key in doc_map.keys()
-    }
+    out = {}
+    for request_key in doc_map.keys():
+        val = body.get(request_key)
+        out[normalize_key(request_key)] = (str(val) if val is not None else "").strip()
+    return out
 
 
 def get_expected_keys(document_type: Optional[str] = None) -> Dict[str, List[str]]:
