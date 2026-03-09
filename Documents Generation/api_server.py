@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 import uvicorn
 
 from doc_utils import fill_document, list_placeholder_variables, normalize_key
@@ -131,11 +131,15 @@ async def generate_one(
     variables = _variables_for_document(body, dt)
     output = BASE_DIR / "output" / f"filled_{dt}.docx"
     output.parent.mkdir(parents=True, exist_ok=True)
-    filled = fill_document(path, variables, output)
-    return StreamingResponse(
-        io.BytesIO(output.read_bytes()),
+    fill_document(path, variables, output)
+    content = output.read_bytes()
+    return Response(
+        content=content,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f"attachment; filename={dt}_letter.docx"},
+        headers={
+            "Content-Disposition": f"attachment; filename={dt}_letter.docx",
+            "Content-Length": str(len(content)),
+        },
     )
 
 
@@ -157,10 +161,14 @@ async def generate_all(body: Dict[str, Any]):
             fill_document(path, variables, output)
             zf.write(output, f"{name}_letter.docx")
     buf.seek(0)
-    return StreamingResponse(
-        buf,
+    content = buf.getvalue()
+    return Response(
+        content=content,
         media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=schengen_documents.zip"},
+        headers={
+            "Content-Disposition": "attachment; filename=schengen_documents.zip",
+            "Content-Length": str(len(content)),
+        },
     )
 
 
