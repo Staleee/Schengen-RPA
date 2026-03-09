@@ -1,0 +1,14 @@
+{
+  "client_name": "Ahmed Al Maktoum",
+  "passport_number": "A12345678",
+  "full_address_uae": "Villa 12, Palm Residence, Sheikh Zayed Road, Dubai, UAE",
+  "maid_full_name": "Maria Santos",
+  "maid_passport_number": "P12345678",
+  "employment_start_date": "1 January 2024",
+  "salary_in_letters": "Two Thousand Dirhams",
+  "schengen_country": "Germany",
+  "departure_date": "15 March 2026",
+  "return_date": "30 March 2026",
+  "phone_number": "+971 50 123 4567",
+  "email": "ahmed@example.ae"
+}

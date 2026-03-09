@@ -1,0 +1,43 @@
+{
+  "cover": {
+    "maid_full_name": "{{maid_full_name}}",
+    "maid_passport_number": "{{maid_passport_number}}",
+    "schengen_country": "{{schengen_country}}",
+    "departure_date": "{{departure_date}}",
+    "return_date": "{{return_date}}",
+    "client_name": "{{client_name}}",
+    "client_passport_number": "{{client_passport_number}}",
+    "employment_start_date": "{{employment_start_date}}",
+    "maid_rvisa_number": "{{maid_rvisa_number}}"
+  },
+  "sponsor": {
+    "client_name": "{{client_name}}",
+    "client_passport_number": "{{client_passport_number}}",
+    "client_address_in_uae": "{{client_address_in_uae}}",
+    "maid_full_name": "{{maid_full_name}}",
+    "maid_passport_number": "{{maid_passport_number}}",
+    "contract_start_date": "{{contract_start_date}}",
+    "salary_in_letters": "{{salary_in_letters}}",
+    "schengen_country": "{{schengen_country}}",
+    "trip_duration": "{{trip_duration}}",
+    "departure_date": "{{departure_date}}",
+    "return_date": "{{return_date}}",
+    "client_phone_number": "{{client_phone_number}}",
+    "client_email_address": "{{client_email_address}}"
+  },
+  "invitation": {
+    "schengen_country": "{{schengen_country}}",
+    "client_name": "{{client_name}}",
+    "client_passport_number": "{{client_passport_number}}",
+    "client_address_in_uae": "{{client_address_in_uae}}",
+    "maid_full_name": "{{maid_full_name}}",
+    "maid_passport_number": "{{maid_passport_number}}",
+    "contract_start_date": "{{contract_start_date}}",
+    "arrival_date": "{{arrival_date}}",
+    "departure_date": "{{departure_date}}",
+    "city": "{{city}}",
+    "hotel_address": "{{hotel_address}}",
+    "client_phone_number": "{{client_phone_number}}",
+    "client_email_address": "{{client_email_address}}"
+  }
+}

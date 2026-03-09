@@ -1,85 +1,143 @@
 """
-Documents Generation – read bold placeholders from .docx and fill them from a request body.
-Bold text in the template = variable name (we normalize to snake_case for the API).
+Documents Generation – replace {{variable}} placeholders in .docx templates.
+Templates use {{variable_name}} so we know exactly what to replace. Works when placeholder is split across runs (we replace in raw XML).
 """
 
 import re
+import zipfile
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
-from docx import Document
+# Per-document variables (snake_case). Zoho will call each endpoint with its own body.
+COVER_LETTER_VARIABLES = [
+    "maid_full_name",
+    "maid_passport_number",
+    "schengen_country",  # Germany / France from Zoho
+    "departure_date",
+    "return_date",
+    "client_name",
+    "client_passport_number",
+    "employment_start_date",  # contract start date from ERP
+]
+
+SPONSOR_LETTER_VARIABLES = [
+    "client_name",
+    "passport_number",
+    "full_address_uae",
+    "maid_full_name",
+    "maid_passport_number",
+    "employment_start_date",
+    "salary_in_letters",
+    "schengen_country",
+    "departure_date",
+    "return_date",
+    "phone_number",  # client phone from Zoho
+    "email",  # client email from Zoho
+]
+
+INVITATION_LETTER_VARIABLES = [
+    "destination",  # Schengen country from Zoho
+    "client_name",
+    "address_in_uae",
+    "maid_name",
+    "contract_start_date",
+    "arrival_date_to_departure_date",
+    "cities",
+    "hotel_address",
+    "phone_number",
+    "email_address",
+]
+
+DOCUMENT_VARIABLES = {
+    "cover": COVER_LETTER_VARIABLES,
+    "sponsor": SPONSOR_LETTER_VARIABLES,
+    "invitation": INVITATION_LETTER_VARIABLES,
+}
 
 
 def normalize_key(text: str) -> str:
-    """Normalize placeholder to request-body key: strip, lowercase, spaces -> underscores."""
+    """Normalize to snake_case: strip, lowercase, spaces -> underscores."""
     if not text or not isinstance(text, str):
         return ""
     t = text.strip().lower()
     t = re.sub(r"\s+", "_", t)
-    t = re.sub(r"[^\w\-]", "", t)  # keep letters, digits, underscore, hyphen
+    t = re.sub(r"[^\w\-]", "", t)
     return t
+
+
+def _strip_xml_tags(s: str) -> str:
+    """Remove XML tags from string to get plain text (e.g. "maid" from "<w:t>maid</w:t>")."""
+    return re.sub(r"<[^>]+>", "", s)
+
+
+def _xml_escape(value: str) -> str:
+    """Escape value for use inside XML <w:t>."""
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&apos;")
+    )
+
+
+# Match {{ ... }} where ... can be split by Word into multiple XML runs (tags in between).
+# So we match {{, then anything (including <w:t>...</w:t>), then }}. Extract var name by stripping tags.
+_PLACEHOLDER_PATTERN = re.compile(r"\{\{(.*?)\}\}", re.DOTALL)
 
 
 def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) -> List[str]:
     """
-    Open docx, replace each bold run whose normalized text matches a key in variables with the value.
-    variables: dict of normalized_key -> value (e.g. {"client_name": "John Doe"}).
-    Returns list of keys that were filled.
+    Replace {{variable_name}} placeholders in the .docx with values from variables.
+    Handles Word splitting placeholders across multiple runs: we match {{...}} even when
+    XML tags appear between the braces (e.g. {{<w:t>maid</w:t><w:t>_full_name</w:t>}}).
+    Every key in variables is used; missing/empty values become ''.
     """
-    doc = Document(str(doc_path))
+    if not variables:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy2(doc_path, output_path)
+        return []
+    normalized = {normalize_key(k): (str(v) if v is not None else "").strip() for k, v in variables.items()}
+
     filled: List[str] = []
-    # Build list of (para, run_index, normalized_key) for each bold run
-    to_fill: List[Tuple[object, int, str]] = []
-    for para in doc.paragraphs:
-        for i, run in enumerate(para.runs):
-            if run.bold and run.text.strip():
-                key = normalize_key(run.text)
-                if key and key in variables:
-                    to_fill.append((para, i, key))
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    for i, run in enumerate(para.runs):
-                        if run.bold and run.text.strip():
-                            key = normalize_key(run.text)
-                            if key and key in variables:
-                                to_fill.append((para, i, key))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    for para, run_index, key in to_fill:
-        run = para.runs[run_index]
-        run.text = str(variables[key])
-        filled.append(key)
+    with zipfile.ZipFile(doc_path, "r") as zin:
+        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for name in zin.namelist():
+                data = zin.read(name)
+                if name == "word/document.xml":
+                    xml = data.decode("utf-8")
+                    # Replace each {{...}} (possibly with XML inside) by looking up normalized var name
+                    def repl(match):
+                        inner = match.group(1)
+                        var_name = normalize_key(_strip_xml_tags(inner))
+                        if var_name in normalized:
+                            filled.append(var_name)
+                            return "<w:r><w:t>" + _xml_escape(normalized[var_name]) + "</w:t></w:r>"
+                        return match.group(0)
 
-    doc.save(str(output_path))
+                    xml = _PLACEHOLDER_PATTERN.sub(repl, xml)
+                    data = xml.encode("utf-8")
+                zout.writestr(name, data)
     return filled
 
 
-def list_bold_variables(doc_path: Path) -> List[Dict[str, str]]:
+def list_placeholder_variables(doc_path: Path) -> List[str]:
     """
-    List all bold run texts (placeholders) in the document.
-    Returns list of {"raw": "Client Name", "key": "client_name"}.
+    List {{variable}} placeholders in the document. Handles Word splitting:
+    we match {{...}} even when XML tags appear between the braces, then strip tags to get the var name.
     """
-    doc = Document(str(doc_path))
-    seen = set()
-    out: List[Dict[str, str]] = []
-    for para in doc.paragraphs:
-        for run in para.runs:
-            if run.bold and run.text.strip():
-                raw = run.text.strip()
-                key = normalize_key(raw)
-                if key and key not in seen:
-                    seen.add(key)
-                    out.append({"raw": raw, "key": key})
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    for run in para.runs:
-                        if run.bold and run.text.strip():
-                            raw = run.text.strip()
-                            key = normalize_key(raw)
-                            if key and key not in seen:
-                                seen.add(key)
-                                out.append({"raw": raw, "key": key})
-    return out
+    found: List[str] = []
+    with zipfile.ZipFile(doc_path, "r") as z:
+        if "word/document.xml" not in z.namelist():
+            return found
+        xml = z.read("word/document.xml").decode("utf-8")
+        for m in _PLACEHOLDER_PATTERN.finditer(xml):
+            inner = m.group(1)
+            var_name = normalize_key(_strip_xml_tags(inner))
+            if var_name and var_name not in found:
+                found.append(var_name)
+    return sorted(found)

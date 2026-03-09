@@ -1,9 +1,10 @@
 # Documents Generation – Schengen letters
 
-API to fill **invitation letter**, **sponsor letter**, and **cover letter** from **one request body**. Used for Schengen applications (all countries). Deploy as a separate service on Railway.
+API to fill **invitation letter**, **sponsor letter**, and **cover letter**. Used for Schengen applications (all countries). Deploy as a separate service on Railway.
 
-- **Bold text** in each .docx template = variable; we normalize to **snake_case** for the API (e.g. `Client Name` → `client_name`).
-- One JSON body for all three documents; map your Zoho fields to these keys (see **REQUEST_BODY.md**).
+- Templates use **{{variable_name}}** placeholders (e.g. `{{maid_full_name}}`, `{{schengen_country}}`).
+- **Each document has its own request body**; Zoho calls each endpoint separately (`?document_type=invitation`, `sponsor`, or `cover`).
+- Exact variables and Zoho mapping: **REQUEST_BODY.md**. Sample bodies: **samples/**.
 
 ---
 
@@ -32,27 +33,21 @@ uvicorn api_server:app --reload --port 8000
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/`, `/health` | Health check |
-| GET | `/variables` | List bold placeholders (variables) per document. Optional `?document_type=invitation\|sponsor\|cover` |
-| POST | `/generate?document_type=invitation` | Generate one document; body = flat key-value. Returns .docx |
-| POST | `/generate?document_type=sponsor` | Same body → sponsor letter .docx |
-| POST | `/generate?document_type=cover` | Same body → cover letter .docx |
-| POST | `/generate-all` | Same body → ZIP with all three filled .docx |
+| GET | `/variables` | Expected keys + placeholders in file per document. Optional `?document_type=invitation\|sponsor\|cover` |
+| POST | `/generate?document_type=cover` | Cover letter; body = cover variables only. Returns .docx |
+| POST | `/generate?document_type=sponsor` | Sponsor letter; body = sponsor variables only. Returns .docx |
+| POST | `/generate?document_type=invitation` | Invitation letter; body = invitation variables only. Returns .docx |
+| POST | `/generate-all` | Body = union of all variables → ZIP with all three .docx |
 
 ---
 
-## Request body
+## Request body (per document)
 
-Flat JSON. Keys = normalized bold placeholders (see **GET /variables** or run `python scripts/extract_bold_variables.py`).
+Each document has its own set of keys. See **REQUEST_BODY.md** for the full list and Zoho mapping. Examples in **samples/**.
 
-Example:
-
-```json
-{
-  "client_name": "Ahmed Al Maktoum",
-  "applicant_name": "Maria Santos",
-  "date_of_invitation": "20 March 2026"
-}
-```
+- **Cover:** `maid_full_name`, `maid_passport_number`, `schengen_country`, `departure_date`, `return_date`, `client_name`, `client_passport_number`, `employment_start_date`
+- **Sponsor:** `client_name`, `passport_number`, `full_address_uae`, `maid_full_name`, `maid_passport_number`, `employment_start_date`, `salary_in_letters`, `schengen_country`, `departure_date`, `return_date`, `phone_number`, `email`
+- **Invitation:** `destination`, `client_name`, `address_in_uae`, `maid_name`, `contract_start_date`, `arrival_date_to_departure_date`, `cities`, `hotel_address`, `phone_number`, `email_address`
 
 ---
 
