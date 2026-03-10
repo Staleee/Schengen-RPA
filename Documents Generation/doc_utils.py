@@ -4,6 +4,7 @@ Uses python-docx so the output is always a valid .docx that Word opens without e
 """
 
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
@@ -97,6 +98,11 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
 
     def repl(match: re.Match) -> str:
         var_name = normalize_key(match.group(1).strip())
+        if var_name == "date":
+            # {{date}} = current date when the document is generated (not from request body)
+            filled.append("date")
+            n = datetime.now()
+            return f"{n.month}/{n.day}/{n.year}"  # e.g. 3/10/2026
         if var_name in normalized:
             filled.append(var_name)
             return normalized[var_name]
