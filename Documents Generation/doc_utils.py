@@ -1,15 +1,19 @@
 """
 Documents Generation – replace {{variable}} placeholders in .docx templates.
-Templates use {{variable_name}} so we know exactly what to replace. Works when placeholder is split across runs (we replace in raw XML).
+Uses python-docx so the output is always a valid .docx that Word opens without errors.
 """
 
 import re
-import zipfile
 from pathlib import Path
 from typing import Dict, List
 
+from docx import Document
+
 # XML 1.0 invalid control chars (only \t \n \r are allowed in content)
 _INVALID_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff]")
+
+# Placeholder in document text: {{variable_name}}
+_PLACEHOLDER_RE = re.compile(r"\{\{([^}]+)\}\}")
 
 # Per-document variables (snake_case). Zoho will call each endpoint with its own body.
 COVER_LETTER_VARIABLES = [
@@ -68,91 +72,90 @@ def normalize_key(text: str) -> str:
     return t
 
 
-def _strip_xml_tags(s: str) -> str:
-    """Remove XML tags from string to get plain text (e.g. "maid" from "<w:t>maid</w:t>")."""
-    return re.sub(r"<[^>]+>", "", s)
-
-
 def _sanitize_for_word(value: str) -> str:
-    """Strip characters that break Word's XML (control chars, invalid Unicode)."""
+    """Strip characters that break Word (control chars, invalid Unicode)."""
     if not value:
         return ""
     return _INVALID_XML_RE.sub("", value)
 
 
-def _xml_escape(value: str) -> str:
-    """Escape value for use inside XML <w:t>."""
-    sanitized = _sanitize_for_word(value)
-    return (
-        sanitized.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&apos;")
-    )
-
-
-# Match {{ ... }} where ... can be split by Word into multiple XML runs (tags in between).
-# So we match {{, then anything (including <w:t>...</w:t>), then }}. Extract var name by stripping tags.
-_PLACEHOLDER_PATTERN = re.compile(r"\{\{(.*?)\}\}", re.DOTALL)
-
-
 def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) -> List[str]:
     """
-    Replace {{variable_name}} placeholders in the .docx with values from variables.
-    Handles Word splitting placeholders across multiple runs: we match {{...}} even when
-    XML tags appear between the braces (e.g. {{<w:t>maid</w:t><w:t>_full_name</w:t>}}).
-    Every key in variables is used; missing/empty values become ''.
+    Replace {{variable_name}} placeholders using python-docx. Output is always a valid
+    .docx that Word opens without "unspecified error". Handles placeholders split across runs.
     """
-    if not variables:
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        import shutil
-        shutil.copy2(doc_path, output_path)
-        return []
-    normalized = {normalize_key(k): (str(v) if v is not None else "").strip() for k, v in variables.items()}
-
-    filled: List[str] = []
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with zipfile.ZipFile(doc_path, "r") as zin:
-        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zout:
-            for name in zin.namelist():
-                data = zin.read(name)
-                if name == "word/document.xml":
-                    xml = data.decode("utf-8", errors="replace")
-                    # Replace each {{...}} (possibly with XML inside). Do NOT replace if the match
-                    # spans paragraph boundaries (would create invalid XML and Word "unspecified error").
-                    def repl(match):
-                        full = match.group(0)
-                        inner = match.group(1)
-                        if "<w:p" in full or "</w:p>" in full:
-                            return full
-                        var_name = normalize_key(_strip_xml_tags(inner))
-                        if var_name in normalized:
-                            filled.append(var_name)
-                            return "<w:r><w:t xml:space=\"preserve\">" + _xml_escape(normalized[var_name]) + "</w:t></w:r>"
-                        return full
+    if not variables:
+        import shutil
+        shutil.copy2(doc_path, output_path)
+        return []
 
-                    xml = _PLACEHOLDER_PATTERN.sub(repl, xml)
-                    data = xml.encode("utf-8")
-                zout.writestr(name, data)
+    normalized = {normalize_key(k): _sanitize_for_word((str(v) if v is not None else "").strip()) for k, v in variables.items()}
+    filled: List[str] = []
+
+    def repl(match: re.Match) -> str:
+        var_name = normalize_key(match.group(1).strip())
+        if var_name in normalized:
+            filled.append(var_name)
+            return normalized[var_name]
+        return match.group(0)
+
+    doc = Document(doc_path)
+
+    for paragraph in doc.paragraphs:
+        # Word often splits {{var}} across multiple runs; join to get full text
+        full_text = "".join(run.text for run in paragraph.runs)
+        if "{{" not in full_text:
+            continue
+        new_text = _PLACEHOLDER_RE.sub(repl, full_text)
+        # Put replaced text back: first run gets the text, rest cleared (keeps valid structure)
+        if paragraph.runs:
+            for i, run in enumerate(paragraph.runs):
+                run.text = new_text if i == 0 else ""
+        else:
+            paragraph.add_run(new_text)
+
+    # Tables: same replacement in each cell
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    full_text = "".join(run.text for run in paragraph.runs)
+                    if "{{" not in full_text:
+                        continue
+                    new_text = _PLACEHOLDER_RE.sub(repl, full_text)
+                    if paragraph.runs:
+                        for i, run in enumerate(paragraph.runs):
+                            run.text = new_text if i == 0 else ""
+                    else:
+                        paragraph.add_run(new_text)
+
+    doc.save(str(output_path))
     return filled
 
 
 def list_placeholder_variables(doc_path: Path) -> List[str]:
-    """
-    List {{variable}} placeholders in the document. Handles Word splitting:
-    we match {{...}} even when XML tags appear between the braces, then strip tags to get the var name.
-    """
+    """List {{variable}} placeholders in the document (paragraphs and table cells)."""
     found: List[str] = []
-    with zipfile.ZipFile(doc_path, "r") as z:
-        if "word/document.xml" not in z.namelist():
-            return found
-        xml = z.read("word/document.xml").decode("utf-8")
-        for m in _PLACEHOLDER_PATTERN.finditer(xml):
-            inner = m.group(1)
-            var_name = normalize_key(_strip_xml_tags(inner))
+    try:
+        doc = Document(doc_path)
+    except Exception:
+        return found
+    for paragraph in doc.paragraphs:
+        full_text = "".join(run.text for run in paragraph.runs)
+        for m in _PLACEHOLDER_RE.finditer(full_text):
+            var_name = normalize_key(m.group(1).strip())
             if var_name and var_name not in found:
                 found.append(var_name)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    full_text = "".join(run.text for run in paragraph.runs)
+                    for m in _PLACEHOLDER_RE.finditer(full_text):
+                        var_name = normalize_key(m.group(1).strip())
+                        if var_name and var_name not in found:
+                            found.append(var_name)
     return sorted(found)
