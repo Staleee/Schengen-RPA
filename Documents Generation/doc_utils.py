@@ -108,35 +108,41 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
             return normalized[var_name]
         return match.group(0)
 
-    doc = Document(doc_path)
-
-    for paragraph in doc.paragraphs:
-        # Word often splits {{var}} across multiple runs; join to get full text
+    def process_paragraph(paragraph):
+        """Replace placeholders in a paragraph and make substituted text bold."""
         full_text = "".join(run.text for run in paragraph.runs)
         if "{{" not in full_text:
-            continue
+            return
         new_text = _PLACEHOLDER_RE.sub(repl, full_text)
-        # Put replaced text back: first run gets the text, rest cleared (keeps valid structure)
         if paragraph.runs:
             for i, run in enumerate(paragraph.runs):
                 run.text = new_text if i == 0 else ""
+                if i == 0 and new_text:
+                    run.bold = True
         else:
-            paragraph.add_run(new_text)
+            r = paragraph.add_run(new_text)
+            r.bold = True
 
-    # Tables: same replacement in each cell
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    full_text = "".join(run.text for run in paragraph.runs)
-                    if "{{" not in full_text:
-                        continue
-                    new_text = _PLACEHOLDER_RE.sub(repl, full_text)
-                    if paragraph.runs:
-                        for i, run in enumerate(paragraph.runs):
-                            run.text = new_text if i == 0 else ""
-                    else:
-                        paragraph.add_run(new_text)
+    def process_block(paragraphs, tables=None):
+        for p in paragraphs:
+            process_paragraph(p)
+        if tables:
+            for table in tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            process_paragraph(p)
+
+    doc = Document(doc_path)
+
+    # Body: paragraphs and tables
+    process_block(doc.paragraphs, doc.tables)
+
+    # Headers and footers (where maid_full_name at bottom/signature often lives)
+    for section in doc.sections:
+        for block in (section.header, section.footer, section.first_page_header, section.first_page_footer, getattr(section, "even_page_header", None), getattr(section, "even_page_footer", None)):
+            if block is not None:
+                process_block(block.paragraphs, getattr(block, "tables", []))
 
     doc.save(str(output_path))
     return filled
