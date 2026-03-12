@@ -109,19 +109,26 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
         return match.group(0)
 
     def process_paragraph(paragraph):
-        """Replace placeholders in a paragraph and make substituted text bold."""
+        """Replace placeholders; only the substituted variable values are bold."""
         full_text = "".join(run.text for run in paragraph.runs)
         if "{{" not in full_text:
             return
-        new_text = _PLACEHOLDER_RE.sub(repl, full_text)
-        if paragraph.runs:
-            for i, run in enumerate(paragraph.runs):
-                run.text = new_text if i == 0 else ""
-                if i == 0 and new_text:
-                    run.bold = True
-        else:
-            r = paragraph.add_run(new_text)
-            r.bold = True
+        # Build segments: (text, bold) – bold only for substituted values
+        segments = []
+        pos = 0
+        for m in _PLACEHOLDER_RE.finditer(full_text):
+            segments.append((full_text[pos : m.start()], False))
+            segments.append((repl(m), True))
+            pos = m.end()
+        segments.append((full_text[pos:], False))
+        # Clear and rebuild: one run per segment, bold only for substituted values
+        for run in list(paragraph.runs):
+            run._r.getparent().remove(run._r)
+        for text, is_bold in segments:
+            if not text:
+                continue
+            r = paragraph.add_run(text)
+            r.bold = is_bold
 
     def process_block(paragraphs, tables=None):
         for p in paragraphs:
