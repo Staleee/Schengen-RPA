@@ -24,9 +24,10 @@ Use this to know what to store in the DB (request body) and what is fixed in cod
 **Also derived in code (do not send from DB):**
 
 - **Employer** = `client_first_name` + `client_surname` + `client_phone`
-- **Applicant address** = copied from `client_street`, `client_house_number`, `client_postal_code`, `client_city`, `client_country`, `client_email`, `client_phone`
+- **Applicant address** = copied from client address (see below)
 - **Occupation address** = same as client address
 - **Name at birth** = same as `maid_surname` when `birth_name` / `maiden_name` not sent
+- **Client address parts** = if you send only `client_address` (one string), we split it into street, house_number, postal_code, city, country (no API key needed)
 
 ---
 
@@ -49,6 +50,8 @@ Every key you need to read from the DB and put into the JSON body. Types and for
 
 ### Client (inviting person)
 
+**Address:** You can send **either** one full address **or** the split parts.
+
 | Key | Type | Format / notes | Example |
 |-----|------|----------------|--------|
 | `client_surname` | string | Family name | `"Muller"` |
@@ -57,13 +60,16 @@ Every key you need to read from the DB and put into the JSON body. Types and for
 | `client_date_of_birth` | string | DD.MM.YYYY | `"10.08.1975"` |
 | `client_birth_place` | string | **Required.** Place of birth | `"Munich"` |
 | `client_nationality` | string | Nationality | `"Germany"` |
-| `client_street` | string | Street (also used for applicant & occupation address) | `"Hauptstrasse"` |
-| `client_house_number` | string | House number | `"42"` |
-| `client_postal_code` | string | Postal code | `"10115"` |
-| `client_city` | string | City | `"Berlin"` |
-| `client_country` | string | Country | `"Germany"` |
+| **`client_address`** | string | **Preferred.** Full address in one string (e.g. from DB). We split it into street, house_number, postal_code, city, country. UAE format supported (e.g. `2604 Tiara United Towers West, Business Bay, Dubai`). | `"2604 Tiara United Towers West, Business Bay, Dubai"` |
+| `client_street` | string | *(Optional if you send `client_address`.)* Street / building name | Filled from `client_address` if missing |
+| `client_house_number` | string | *(Optional if you send `client_address`.)* Unit / house number | Filled from `client_address` if missing |
+| `client_postal_code` | string | *(Optional.)* Postal code | Filled from `client_address` if missing |
+| `client_city` | string | *(Optional if you send `client_address`.)* City | Filled from `client_address` if missing |
+| `client_country` | string | *(Optional if you send `client_address`.)* Country | Filled from `client_address` if missing |
 | `client_email` | string | Email | `"host@example.de"` |
 | `client_phone` | string | Phone, no leading + | `"49 30 12345678"` |
+
+**Where this address is used on the form:** The client (inviting person) address is **not** an address “in the Schengen country”. It is the **inviter’s address** (usually in UAE, where the client lives and where the maid works). The API puts it in three places on the VIDEX form: (1) **Reference – Inviting person** (address of the host), (2) **Contact data** (applicant’s address = where the maid lives), (3) **Occupation** (employer’s address = where the maid works). There is no separate “address in Germany” field – only travel **destination** (country name, e.g. `main_destination`: `"Germany"`), not a street address in the Schengen country.
 
 ### Passport
 
@@ -111,7 +117,7 @@ Every key you need to read from the DB and put into the JSON body. Types and for
 
 ## 3. Full request body JSON (copy for DB → API)
 
-Use this exact key set when building the request from the DB. Only include keys you have; optional can be omitted.
+Use this key set when building the request from the DB. Only include keys you have; optional can be omitted. **For address:** send either `client_address` (one string) or the split fields (`client_street`, `client_house_number`, etc.); if you send only `client_address`, we fill the rest.
 
 ```json
 {
@@ -129,6 +135,7 @@ Use this exact key set when building the request from the DB. Only include keys 
   "client_date_of_birth": "",
   "client_birth_place": "",
   "client_nationality": "",
+  "client_address": "",
   "client_street": "",
   "client_house_number": "",
   "client_postal_code": "",

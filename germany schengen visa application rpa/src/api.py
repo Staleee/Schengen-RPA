@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from automation.field_translator import FieldTranslator
 from automation.form_filler import VidexFormFiller
+from address_parser import parse_address
 
 app = FastAPI(
     title="VIDEX Form Automation API",
@@ -100,6 +101,31 @@ async def fill_form(data: dict[str, Any]):
     try:
         # Start with hardcoded defaults; body only sends what varies (no occupation, reference_type, costs, etc.)
         merged = {**HARDCODED_DEFAULTS, **data}
+
+        # If Zoho sends one full address, parse it into parts (street, house_number, postal_code, city, country) via LLM
+        full_addr = (
+            merged.get("client_address")
+            or merged.get("full_address")
+            or merged.get("client_full_address")
+            or merged.get("inviter_address")
+        )
+        addr_parts = ("client_street", "client_house_number", "client_postal_code", "client_city", "client_country")
+        need_parts = any(not merged.get(k) or not str(merged.get(k, "")).strip() for k in addr_parts)
+        if full_addr and need_parts:
+            parsed = parse_address(str(full_addr).strip())
+            if parsed:
+                key_map = {
+                    "street": "client_street",
+                    "house_number": "client_house_number",
+                    "postal_code": "client_postal_code",
+                    "city": "client_city",
+                    "country": "client_country",
+                }
+                for part_key, client_key in key_map.items():
+                    if not merged.get(client_key) or not str(merged.get(client_key, "")).strip():
+                        val = parsed.get(part_key, "") or ""
+                        if val:
+                            merged[client_key] = val
 
         # passport_type: default "Passport"; if body has "official" use "Official passport"
         pt = (merged.get("passport_type") or "").strip()
