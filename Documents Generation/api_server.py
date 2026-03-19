@@ -163,7 +163,7 @@ async def generate_one(
     """
     Generate one document. Default file is **PDF**; use ?output=docx for Word.
     Sponsor: trip_duration from departure_date + return_date (inclusive days).
-    salary_in_letters: plain numbers (e.g. 1500) become words + UAE Dirhams.
+    salary_in_letters: plain numbers (e.g. 1500) become words only (AED in template).
     """
     dt = document_type or body.pop("document_type", None)
     if not dt:

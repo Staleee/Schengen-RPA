@@ -52,8 +52,8 @@ def compute_trip_duration_days(departure: str, return_date: str) -> Optional[int
 
 def salary_numeric_to_words(value: str) -> Optional[str]:
     """
-    If value is a plain number (e.g. 1500, 1,500.00), return English words + Dirhams.
-    Otherwise return None (caller keeps original text).
+    If value is a plain number (e.g. 1500, 1,500.00), return English words only.
+    AED/currency is already in the letter template. Otherwise return None (caller keeps original text).
     """
     if not value or not str(value).strip():
         return None
@@ -76,7 +76,7 @@ def salary_numeric_to_words(value: str) -> Optional[str]:
     parts = words.split()
     if parts:
         parts[0] = parts[0].capitalize()
-    return " ".join(parts) + " UAE Dirhams"
+    return " ".join(parts)
 
 
 def enrich_variables(document_type: str, variables: Dict[str, str]) -> Dict[str, str]:

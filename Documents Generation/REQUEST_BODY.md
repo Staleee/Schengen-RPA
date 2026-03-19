@@ -14,7 +14,7 @@ Templates use **{{variable_name}}** placeholders. Each document has **its own re
 ### Sponsor letter – auto-filled fields
 
 - **`trip_duration`** – If you send **`departure_date`** and **`return_date`**, the service overwrites `trip_duration` with the **inclusive** calendar day count (e.g. 15 Mar–30 Mar → `16 days`). You can still send `trip_duration`; it will be replaced when both dates parse successfully.
-- **`salary_in_letters`** – You may send a **number** (e.g. `1500` or `"1500"`). It is converted to English words and suffixed with **“UAE Dirhams”** (e.g. *One thousand five hundred UAE Dirhams*). If you send full text already, it is left as-is.
+- **`salary_in_letters`** – You may send a **number** (e.g. `1500` or `"1500"`). It is converted to English words only (e.g. *One thousand five hundred*). AED is already in the letter template. If you send full text already, it is left as-is.
 
 ---
 
@@ -47,7 +47,7 @@ Templates use **{{variable_name}}** placeholders. Each document has **its own re
 | `maid_full_name` | Maid full name |
 | `maid_passport_number` | Maid passport number |
 | `contract_start_date` | Contract / employment start date |
-| `salary_in_letters` | Salary in letters (or numeric → auto words + UAE Dirhams) |
+| `salary_in_letters` | Salary in letters (or numeric → auto words; AED is in template) |
 | `schengen_country` | Germany / France (Schengen country from Zoho) |
 | `trip_duration` | Optional; auto from `departure_date` + `return_date` when both set |
 | `departure_date` | Departure date |
