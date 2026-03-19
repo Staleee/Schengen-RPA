@@ -11,9 +11,18 @@ Templates use **{{variable_name}}** placeholders. Each document has **its own re
 - **`?format=json`** – Same as above, but JSON with `content_base64` + `filename` + `content_type`.
 - PDF conversion uses **LibreOffice** (`soffice`) on the server. If it is missing, the API falls back to **.docx** and sets response headers **`X-Pdf-Unavailable: true`** and **`X-Document-Format: docx`**.
 
+### Zoho date format (recommended)
+
+Send **`departure_date`** and **`return_date`** as **year / month / day** (not day/month/year):
+
+- **`YYYY/MM/DD`** or **`YYYY-MM-DD`** — e.g. `2026/6/3`, `2026/06/03`, `2026-8-30`
+- **`YY/MM/DD`** — two-digit year is interpreted as **20YY** (e.g. `26/6/3` → 3 June 2026)
+
+Slashes or hyphens are fine between parts. This avoids mixing up June 3 vs 3 June when parsing.
+
 ### Sponsor letter – auto-filled fields
 
-- **`trip_duration`** – If you send **`departure_date`** and **`return_date`**, the service overwrites `trip_duration` with the **inclusive** calendar day count (e.g. 15 Mar–30 Mar → `16 days`). You can still send `trip_duration`; it will be replaced when both dates parse successfully.
+- **`trip_duration`** — **Always recalculated** from **`departure_date`** and **`return_date`** when both parse successfully. Any `trip_duration` sent by Zoho is **ignored** in that case. Formula: **inclusive** calendar days (first and last day both count), e.g. `2026/6/3`–`2026/8/30` → `89 days`.
 - **`salary_in_letters`** – You may send a **number** (e.g. `1500` or `"1500"`). It is converted to English words only (e.g. *One thousand five hundred*). AED is already in the letter template. If you send full text already, it is left as-is.
 
 ---
@@ -49,9 +58,9 @@ Templates use **{{variable_name}}** placeholders. Each document has **its own re
 | `contract_start_date` | Contract / employment start date |
 | `salary_in_letters` | Salary in letters (or numeric → auto words; AED is in template) |
 | `schengen_country` | Germany / France (Schengen country from Zoho) |
-| `trip_duration` | Optional; auto from `departure_date` + `return_date` when both set |
-| `departure_date` | Departure date |
-| `return_date` | Return date |
+| `trip_duration` | Ignored when both dates parse; server sets from `departure_date` + `return_date` (inclusive days) |
+| `departure_date` | Departure date — use **YYYY/MM/DD** from Zoho (year first) |
+| `return_date` | Return date — same format |
 | `client_phone_number` | Client phone number |
 | `client_email_address` | Client email |
 

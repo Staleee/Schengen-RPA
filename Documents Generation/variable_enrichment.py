@@ -17,18 +17,62 @@ except ImportError:
     num2words = None  # type: ignore
 
 
+def _parse_zoho_year_month_day(s: str) -> Optional[date]:
+    """
+    Zoho sends dates as year/month/day (not day/month/year).
+    Accepts: YYYY/MM/DD, YYYY-M-D, YY/MM/DD (2-digit year → 20YY), same with hyphens.
+    """
+    s = str(s).strip()
+    if not s:
+        return None
+    # Four-digit year first (avoids dayfirst confusion with 2026/6/3 etc.)
+    m = re.fullmatch(r"(\d{4})[/-](\d{1,2})[/-](\d{1,2})", s)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            return date(y, mo, d)
+        except ValueError:
+            return None
+    # Two-digit year: yy/mm/dd → 20yy (e.g. 26/6/3 → 2026-06-03)
+    m2 = re.fullmatch(r"(\d{2})[/-](\d{1,2})[/-](\d{1,2})", s)
+    if m2:
+        yy = int(m2.group(1))
+        mo, d = int(m2.group(2)), int(m2.group(3))
+        y = 2000 + yy if yy < 100 else yy
+        try:
+            return date(y, mo, d)
+        except ValueError:
+            return None
+    return None
+
+
 def _parse_date(s: str) -> Optional[date]:
     if not s or not str(s).strip():
         return None
     s = str(s).strip()
+
+    # 1) Zoho / ISO-style year-first (never treat as day-first)
+    z = _parse_zoho_year_month_day(s)
+    if z is not None:
+        return z
+
+    # 2) Plain ISO YYYY-MM-DD (no slashes)
+    for fmt in ("%Y-%m-%d",):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+
+    # 3) dateutil: yearfirst=True (NOT dayfirst) so 2026-6-3 stays June 3, not March 6
     if date_parser:
         try:
-            dt = date_parser.parse(s, dayfirst=True)
+            dt = date_parser.parse(s, yearfirst=True, dayfirst=False)
             return dt.date()
         except (ValueError, TypeError, OverflowError):
             pass
-    # Fallback: YYYY-MM-DD
-    for fmt in ("%d.%m.%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y"):
+
+    # 4) Legacy human / EU formats from samples (day first)
+    for fmt in ("%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y"):
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:
@@ -90,7 +134,8 @@ def enrich_variables(document_type: str, variables: Dict[str, str]) -> Dict[str,
         if converted is not None:
             out[sal_key] = converted
 
-    # Sponsor: trip length from departure + return (inclusive days)
+    # Sponsor: trip_duration is always computed from departure + return when both parse
+    # (overrides any trip_duration sent by Zoho). Dates from Zoho: year/month/day — see _parse_zoho_year_month_day.
     if document_type == "sponsor":
         dep = out.get("departure_date", "")
         ret = out.get("return_date", "")
