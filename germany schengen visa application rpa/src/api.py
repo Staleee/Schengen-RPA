@@ -4,7 +4,6 @@ Accepts JSON POST requests and returns generated PDF
 """
 
 import os
-import tempfile
 import asyncio
 from pathlib import Path
 from typing import Any
@@ -18,37 +17,19 @@ from fastapi.responses import Response
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-from automation.field_translator import FieldTranslator
-from automation.form_filler import VidexFormFiller
-from address_parser import parse_address
+from prepare_fill import build_translated_data
+from form_runner import run_form_filler
+
+from jobs import enqueue_job, get_job, is_redis_available
 
 app = FastAPI(
     title="VIDEX Form Automation API",
-    description="Automate German Schengen visa application form filling",
+    description="Automate German Schengen visa application form filling. Use POST /submit + callback to avoid Zoho timeout.",
     version="1.0.0"
 )
 
-# Paths
+# Paths (form_runner has SCHEMA_PATH)
 BASE_DIR = Path(__file__).parent.parent
-SCHEMA_PATH = BASE_DIR / "output" / "fields_schema.json"
-
-# Hardcoded defaults – do NOT send these in the request body. We fill them for you.
-# marital_status, number_of_entries, passport_type (or arrival/departure) are in the request body.
-# has_residence_permit / residence_in_other_country = "Do you have a residence permit in another country?" (e.g. re-entry); we set true so the residence section is filled.
-HARDCODED_DEFAULTS = {
-    "occupation": "Blue-collar worker",
-    "reference_type": "Inviting person",
-    "purpose_of_visit": "Tourism",
-    "has_residence_permit": True,
-    "residence_in_other_country": True,
-    "rvisa_type": "Registration Visa",
-    "passport_type": "Passport",
-    "third_party_pays": True,
-    "inviter_pays": True,
-    "all_expenses_covered": True,
-    "applicant_pays": False,
-    "freedom_of_movement": False,
-}
 
 # Thread pool for running playwright (sync) in async context
 executor = ThreadPoolExecutor(max_workers=2)
@@ -60,210 +41,95 @@ async def root():
     return {
         "status": "ok",
         "service": "VIDEX Form Automation API",
-        "usage": "POST /fill with JSON body containing applicant data",
-        "example_fields": [
-            "surname", "first_name", "date_of_birth", "nationality",
-            "passport_number", "visa_start_date", "visa_end_date"
-        ]
+        "usage": "POST /submit with callback_url (async, no timeout) or POST /fill (sync, may timeout)",
+        "async": "POST /submit with body + callback_url + optional record_id; we POST result to callback when done.",
     }
 
 
 @app.get("/health")
 async def health():
     """Health check for Railway"""
-    return {"status": "healthy"}
+    return {"status": "healthy", "redis": is_redis_available()}
+
+
+@app.post("/submit")
+async def submit_job(data: dict[str, Any]):
+    """
+    Queue a VIDEX job and return immediately (no timeout). Worker will run the form and POST the result to your callback_url.
+    Body: same as POST /fill. Extra keys:
+    - callback_url (required if Redis is configured): we POST JSON here when done: { job_id, record_id, status: "completed"|"failed", pdf_base64?, filename?, error? }.
+    - record_id (optional): your record ID, echoed in callback.
+    """
+    callback_url = (data.pop("callback_url", None) or "").strip()
+    record_id = (data.pop("record_id", None) or "").strip()
+    if not is_redis_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Async queue unavailable (REDIS_URL not set). Use POST /fill for sync request, or add Redis.",
+        )
+    if not callback_url:
+        raise HTTPException(
+            status_code=400,
+            detail="callback_url is required. When the PDF is ready we POST to this URL (e.g. Zoho Flow webhook).",
+        )
+    try:
+        build_translated_data(data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    job_id = enqueue_job(data, callback_url, record_id)
+    if not job_id:
+        raise HTTPException(status_code=503, detail="Failed to enqueue job.")
+    return {"job_id": job_id, "status": "queued", "message": "Worker will POST result to your callback_url when done."}
+
+
+@app.get("/job/{job_id}")
+async def job_status(job_id: str):
+    """Get job status (queued, processing, completed, failed). Optional: use if you don't rely only on callback."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    out = {"job_id": job_id, "status": job.get("status", "unknown")}
+    if job.get("error"):
+        out["error"] = job["error"]
+    return out
 
 
 @app.post("/fill")
 async def fill_form(data: dict[str, Any]):
     """
-    Fill VIDEX form with applicant data and return PDF.
-    
-    Send a JSON body with applicant fields (English names supported).
-    Returns the generated PDF file.
-    
-    Example (maid_* = applicant, client_* = inviting person):
-    ```json
-    {
-        "maid_surname": "Santos",
-        "maid_first_name": "Maria",
-        "maid_date_of_birth": "22.05.1990",
-        "maid_country_of_birth": "Philippines",
-        "maid_nationality": "Philippines",
-        "client_surname": "Muller",
-        "client_first_name": "Hans",
-        "client_birth_place": "Munich",
-        "client_country": "Germany",
-        ...
-    }
-    ```
+    Fill VIDEX form synchronously and return PDF. May timeout on slow runs; for Zoho use POST /submit + callback_url instead.
     """
     try:
-        # Start with hardcoded defaults; body only sends what varies (no occupation, reference_type, costs, etc.)
-        merged = {**HARDCODED_DEFAULTS, **data}
-
-        # If Zoho sends one full address, parse it into parts (street, house_number, postal_code, city, country) via LLM
-        full_addr = (
-            merged.get("client_address")
-            or merged.get("full_address")
-            or merged.get("client_full_address")
-            or merged.get("inviter_address")
-        )
-        addr_parts = ("client_street", "client_house_number", "client_postal_code", "client_city", "client_country")
-        need_parts = any(not merged.get(k) or not str(merged.get(k, "")).strip() for k in addr_parts)
-        if full_addr and need_parts:
-            parsed = parse_address(str(full_addr).strip())
-            if parsed:
-                key_map = {
-                    "street": "client_street",
-                    "house_number": "client_house_number",
-                    "postal_code": "client_postal_code",
-                    "city": "client_city",
-                    "country": "client_country",
-                }
-                for part_key, client_key in key_map.items():
-                    if not merged.get(client_key) or not str(merged.get(client_key, "")).strip():
-                        val = parsed.get(part_key, "") or ""
-                        if val:
-                            merged[client_key] = val
-
-        # passport_type: default "Passport"; if body has "official" use "Official passport"
-        pt = (merged.get("passport_type") or "").strip()
-        if pt and "official" in pt.lower():
-            merged["passport_type"] = "Official passport"
-
-        # Employer = client name + client phone (no separate employer in body)
-        if not merged.get("employer") or not str(merged.get("employer", "")).strip():
-            fn = merged.get("client_first_name") or ""
-            sn = merged.get("client_surname") or ""
-            client_name = f"{fn} {sn}".strip()
-            phone = merged.get("client_phone") or merged.get("phone") or ""
-            if phone and str(phone).strip().startswith("+"):
-                phone = str(phone).strip()[1:].strip()
-            if client_name or phone:
-                merged["employer"] = f"{client_name}, {phone}".strip(", ").strip()
-
-        # Applicant address (Contact Data) = client when not provided
-        for addr_key, client_key in [
-            ("street", "client_street"), ("house_number", "client_house_number"),
-            ("postal_code", "client_postal_code"), ("city", "client_city"), ("country", "client_country"),
-            ("email", "client_email"), ("phone", "client_phone"),
-        ]:
-            if (not merged.get(addr_key) or not str(merged.get(addr_key, "")).strip()) and merged.get(client_key):
-                val = merged.get(client_key)
-                if addr_key == "phone" and val and str(val).strip().startswith("+"):
-                    val = str(val).strip()[1:].strip()
-                merged[addr_key] = val
-
-        # Occupation address = client address (maid works at client's house; same fields, different section)
-        for emp_key, client_key in [
-            ("employer_street", "client_street"), ("employer_house_number", "client_house_number"),
-            ("employer_postal_code", "client_postal_code"), ("employer_city", "client_city"),
-            ("employer_country", "client_country"),
-        ]:
-            if (not merged.get(emp_key) or not str(merged.get(emp_key, "")).strip()) and merged.get(client_key):
-                merged[emp_key] = merged[client_key]
-
-        # Name at birth (geburtsname) = same as family name when not provided
-        family_name = merged.get("maid_surname") or merged.get("surname") or merged.get("family_name")
-        if family_name and (not merged.get("birth_name") and not merged.get("maiden_name")):
-            merged["birth_name"] = family_name
-
-        # Translate to German field IDs (no defaults file – we use HARDCODED_DEFAULTS only)
-        translator = FieldTranslator(defaults_path=None)
-        translated_data = translator.translate_data(merged)
-        
-        # Reference = Inviting person; need client_birth_place for reference section
-        ref_place = (
-            merged.get("client_birth_place") or merged.get("inviter_birth_place")
-            or translated_data.get("referenz.ansprechpartner.geburtsort")
-        )
-        if not ref_place or not str(ref_place).strip():
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "client_birth_place (or inviter_birth_place) is required for the reference section.",
-                    "example": {"client_birth_place": "Berlin"},
-                },
-            )
-
-        # Get name for filename (applicant = maid)
-        first_name = merged.get("maid_first_name") or merged.get("first_name") or merged.get("vorname", "applicant")
-        surname = merged.get("maid_surname") or merged.get("surname") or merged.get("familienname", "")
-        full_name = f"{first_name}_{surname}".strip("_").replace(" ", "_")
-        
-        # Run form filling in thread pool
+        translated_data, full_name = build_translated_data(data)
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
             executor,
             run_form_filler,
             translated_data,
-            full_name
+            full_name,
         )
-        
         if result.get("pdf_content"):
-            # Generate filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"videx_{full_name}_{timestamp}.pdf"
-            
             return Response(
                 content=result["pdf_content"],
                 media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"'
-                }
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": result.get("error", "PDF generation failed"),
-                    "fields_filled": result.get("successful", 0),
-                    "fields_failed": result.get("failed", 0)
-                }
-            )
-                
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": result.get("error", "PDF generation failed"),
+                "fields_filled": result.get("successful", 0),
+                "fields_failed": result.get("failed", 0),
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail={"error": str(e)}
-        )
-
-
-def run_form_filler(data: dict[str, Any], name: str) -> dict[str, Any]:
-    """Run the form filler synchronously (called from thread pool)"""
-    try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            screenshot_dir = temp_path / "screenshots"
-            screenshot_dir.mkdir(exist_ok=True)
-            
-            # Initialize form filler
-            headless = os.environ.get("HEADLESS", "true").lower() in ("1", "true", "yes")
-            filler = VidexFormFiller(
-                applicant_data=data,
-                schema_path=SCHEMA_PATH if SCHEMA_PATH.exists() else None,
-                headless=headless,
-                slow_mo=0,
-                screenshot_on_error=True,
-                screenshot_dir=screenshot_dir,
-                output_dir=temp_path
-            )
-            
-            # Fill the form
-            result = filler.fill_form(submit=False, save_pdf=True)
-            
-            # Read PDF content if available
-            pdf_path = result.get("pdf_path")
-            if pdf_path and Path(pdf_path).exists():
-                result["pdf_content"] = Path(pdf_path).read_bytes()
-            
-            return result
-            
-    except Exception as e:
-        return {"error": str(e), "successful": 0, "failed": 0}
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
 
 if __name__ == "__main__":

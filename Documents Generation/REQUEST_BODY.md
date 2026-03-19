@@ -4,6 +4,18 @@
 
 Templates use **{{variable_name}}** placeholders. Each document has **its own request body**; Zoho calls each endpoint separately (`?document_type=invitation`, `sponsor`, or `cover`).
 
+### Response format (PDF default)
+
+- **`POST /generate`** – Returns **PDF** by default (`Content-Type: application/pdf`, filename `*_letter.pdf`). Use **`?output=docx`** for Word.
+- **`POST /generate-all`** – ZIP of three **PDFs** by default; use **`?output=docx`** for `.docx` files in the ZIP.
+- **`?format=json`** – Same as above, but JSON with `content_base64` + `filename` + `content_type`.
+- PDF conversion uses **LibreOffice** (`soffice`) on the server. If it is missing, the API falls back to **.docx** and sets response headers **`X-Pdf-Unavailable: true`** and **`X-Document-Format: docx`**.
+
+### Sponsor letter – auto-filled fields
+
+- **`trip_duration`** – If you send **`departure_date`** and **`return_date`**, the service overwrites `trip_duration` with the **inclusive** calendar day count (e.g. 15 Mar–30 Mar → `16 days`). You can still send `trip_duration`; it will be replaced when both dates parse successfully.
+- **`salary_in_letters`** – You may send a **number** (e.g. `1500` or `"1500"`). It is converted to English words and suffixed with **“UAE Dirhams”** (e.g. *One thousand five hundred UAE Dirhams*). If you send full text already, it is left as-is.
+
 ---
 
 ## 1. Cover letter
@@ -30,17 +42,18 @@ Templates use **{{variable_name}}** placeholders. Each document has **its own re
 | Request key | Zoho / source |
 |-------------|----------------|
 | `client_name` | Client name |
-| `passport_number` | Client passport number |
-| `full_address_uae` | Full address, UAE |
+| `client_passport_number` | Client passport number |
+| `client_address_in_uae` | Full address, UAE |
 | `maid_full_name` | Maid full name |
 | `maid_passport_number` | Maid passport number |
-| `employment_start_date` | Employment start date |
-| `salary_in_letters` | Salary in letters |
+| `contract_start_date` | Contract / employment start date |
+| `salary_in_letters` | Salary in letters (or numeric → auto words + UAE Dirhams) |
 | `schengen_country` | Germany / France (Schengen country from Zoho) |
+| `trip_duration` | Optional; auto from `departure_date` + `return_date` when both set |
 | `departure_date` | Departure date |
 | `return_date` | Return date |
-| `phone_number` | Client phone number from Zoho |
-| `email` | Client email from Zoho |
+| `client_phone_number` | Client phone number |
+| `client_email_address` | Client email |
 
 ---
 
@@ -50,16 +63,19 @@ Templates use **{{variable_name}}** placeholders. Each document has **its own re
 
 | Request key | Zoho / source |
 |-------------|----------------|
-| `destination` | Schengen country from Zoho |
+| `schengen_country` | Schengen country from Zoho |
 | `client_name` | Client name |
-| `address_in_uae` | Address in UAE |
-| `maid_name` | Maid name |
+| `client_passport_number` | Client passport number |
+| `client_address_in_uae` | Address in UAE |
+| `maid_full_name` | Maid full name |
+| `maid_passport_number` | Maid passport number |
 | `contract_start_date` | Contract start date |
-| `arrival_date_to_departure_date` | Arrival date to departure date |
-| `cities` | Cities |
-| `hotel_address` | Hotel/Address |
-| `phone_number` | Phone number |
-| `email_address` | Email address |
+| `arrival_date` | Arrival date |
+| `departure_date` | Departure date |
+| `city` | City |
+| `hotel_address` | Hotel / address |
+| `client_phone_number` | Phone number |
+| `client_email_address` | Email address |
 
 ---
 
@@ -71,6 +87,6 @@ In the .docx templates, variables are written as **{{variable_name}}** (e.g. `{{
 
 ---
 
-## LaTeX
+## Output
 
-Output is **.docx** only for now. LaTeX/PDF can be added later as an option if you want neater typesetting; the same request bodies and variables would apply.
+Letters are generated from **.docx** templates; the API returns **PDF** by default (LibreOffice conversion). Use **`?output=docx`** when you need editable Word files.

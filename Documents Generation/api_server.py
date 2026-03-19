@@ -11,11 +11,16 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import Response, StreamingResponse
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import Response
 import uvicorn
 
 from doc_utils import fill_document, list_placeholder_variables, normalize_key
+from pdf_convert import docx_to_pdf
+from variable_enrichment import enrich_variables
+
+PDF_MEDIA = "application/pdf"
+DOCX_MEDIA = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 app = FastAPI(
     title="Documents Generation API",
@@ -47,6 +52,34 @@ def _ensure_zip_content(content: bytes, label: str = "file") -> None:
             status_code=500,
             detail=f"Generated {label} is not a valid docx/zip (starts with {start!r}). Check template and server.",
         )
+
+
+def _build_one_document(
+    document_type: str, body: Dict[str, Any], want_pdf: bool
+) -> tuple[bytes, str, str, Dict[str, str]]:
+    """
+    Fill template; return (bytes, filename, media_type, extra_headers).
+    want_pdf=True: convert to PDF (LibreOffice). If conversion fails, returns .docx with X-Pdf-Unavailable.
+    """
+    path = TEMPLATES[document_type]
+    variables = enrich_variables(document_type, _variables_for_document(body, document_type))
+    out_docx = BASE_DIR / "output" / f"filled_{document_type}.docx"
+    out_docx.parent.mkdir(parents=True, exist_ok=True)
+    fill_document(path, variables, out_docx)
+    docx_bytes = out_docx.read_bytes()
+    _ensure_zip_content(docx_bytes, "docx")
+    extra: Dict[str, str] = {}
+    if not want_pdf:
+        return docx_bytes, f"{document_type}_letter.docx", DOCX_MEDIA, extra
+    pdf_out = BASE_DIR / "output" / f"filled_{document_type}.pdf"
+    pdf_path = docx_to_pdf(out_docx, pdf_out)
+    if pdf_path and pdf_path.exists():
+        pdf_bytes = pdf_path.read_bytes()
+        if pdf_bytes.startswith(b"%PDF"):
+            return pdf_bytes, f"{document_type}_letter.pdf", PDF_MEDIA, extra
+    extra["X-Pdf-Unavailable"] = "true"
+    extra["X-Document-Format"] = "docx"
+    return docx_bytes, f"{document_type}_letter.docx", DOCX_MEDIA, extra
 
 
 def _load_mapping() -> Dict[str, Dict[str, str]]:
@@ -125,12 +158,12 @@ async def generate_one(
     body: Dict[str, Any],
     document_type: Optional[str] = None,
     format: Optional[str] = None,
+    output: Optional[str] = Query(None, description="pdf (default) or docx"),
 ):
     """
-    Generate one document. Pass document_type in the URL (?document_type=invitation) OR in the body ("document_type": "invitation").
-    document_type = invitation | sponsor | cover.
-    Body: flat key-value; keys from document_mapping.json for that document.
-    By default returns the .docx file. Add ?format=json to get JSON with base64 file + filename (so you can save with correct type).
+    Generate one document. Default file is **PDF**; use ?output=docx for Word.
+    Sponsor: trip_duration from departure_date + return_date (inclusive days).
+    salary_in_letters: plain numbers (e.g. 1500) become words + UAE Dirhams.
     """
     dt = document_type or body.pop("document_type", None)
     if not dt:
@@ -151,50 +184,49 @@ async def generate_one(
     except zipfile.BadZipFile:
         raise HTTPException(status_code=500, detail=f"Template {path.name} is not a valid .docx (not a ZIP file). Re-upload a real Word document.")
 
-    variables = _variables_for_document(body, dt)
-    output = BASE_DIR / "output" / f"filled_{dt}.docx"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    fill_document(path, variables, output)
-    content = output.read_bytes()
-    _ensure_zip_content(content, "docx")
-    filename = f"{dt}_letter.docx"
+    want_pdf = (output or "").lower().strip() != "docx"
+    content, filename, media_type, extra_headers = _build_one_document(dt, body, want_pdf)
 
     if format and format.lower() == "json":
         return {
             "filename": filename,
-            "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "content_type": media_type,
             "content_base64": base64.b64encode(content).decode("ascii"),
         }
 
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Length": str(len(content)),
-            "Cache-Control": "no-transform",
-        },
-    )
+    hdrs = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Length": str(len(content)),
+        "Cache-Control": "no-transform",
+    }
+    hdrs.update(extra_headers)
+    return Response(content=content, media_type=media_type, headers=hdrs)
 
 
 @app.post("/generate-all")
-async def generate_all(body: Dict[str, Any], format: Optional[str] = None):
+async def generate_all(
+    body: Dict[str, Any],
+    format: Optional[str] = None,
+    output: Optional[str] = Query(None, description="pdf (default) or docx"),
+):
     """
-    Generate all three documents from one request body. Each document uses only the keys
-    defined for it in document_mapping.json. Returns a ZIP with invitation_letter.docx, sponsor_letter.docx, cover_letter.docx.
-    Add ?format=json to get JSON with base64 zip + filename.
+    Generate all three documents from one request body. Default: each file as **PDF** inside the ZIP
+    (invitation_letter.pdf, sponsor_letter.pdf, cover_letter.pdf). Use ?output=docx for Word files in the ZIP.
     """
-    out_dir = BASE_DIR / "output"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    want_pdf = (output or "").lower().strip() != "docx"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, path in TEMPLATES.items():
             if not path.exists():
                 continue
-            variables = _variables_for_document(body, name)
-            output = out_dir / f"filled_{name}.docx"
-            fill_document(path, variables, output)
-            zf.write(output, f"{name}_letter.docx")
+            try:
+                with zipfile.ZipFile(path, "r") as z:
+                    if "word/document.xml" not in z.namelist():
+                        continue
+            except zipfile.BadZipFile:
+                continue
+            doc_bytes, arc_name, _media, _extra = _build_one_document(name, body, want_pdf)
+            zf.writestr(arc_name, doc_bytes)
     buf.seek(0)
     content = buf.getvalue()
     _ensure_zip_content(content, "zip")

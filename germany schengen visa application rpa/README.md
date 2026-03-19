@@ -2,6 +2,8 @@
 
 Automate the German VIDEX Schengen visa application form. Deploy as an API or run locally.
 
+**Zoho timing out?** Use **async flow**: POST `/submit` with `callback_url`; we return a `job_id` immediately and a **worker** POSTs the PDF to your URL when done. See **[RAILWAY_ASYNC.md](RAILWAY_ASYNC.md)** for 2 services + Redis setup.
+
 ## 🚀 API Usage (Deployed)
 
 Send a POST request with applicant data in JSON, receive the filled form as PDF:
