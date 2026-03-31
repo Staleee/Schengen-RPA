@@ -1,0 +1,518 @@
+[
+  {
+    "name": "EmbajadaConsulado",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Proveedor de servicios",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Intermediario comercial",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Frontera nombre",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Otro",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Documento de viaje",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Medios de subsistencia",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Invitación",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Medio de transporte",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Seguro médico de viaje",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Otros",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Denegado",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Expedido",
+    "ft": "/Btn"
+  },
+  {
+    "name": "A",
+    "ft": "/Btn"
+  },
+  {
+    "name": "C",
+    "ft": "/Btn"
+  },
+  {
+    "name": "VTL",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Válido",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Una",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Dos",
+    "ft": "/Btn"
+  },
+  {
+    "name": "múltiples",
+    "ft": "/Btn"
+  },
+  {
+    "name": "VarónMale",
+    "ft": "/Btn"
+  },
+  {
+    "name": "MujerFemale",
+    "ft": "/Btn"
+  },
+  {
+    "name": "OtroOther",
+    "ft": "/Btn"
+  },
+  {
+    "name": "ChkBox",
+    "ft": "/Btn"
+  },
+  {
+    "name": "ChkBox-0",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Unión registrada",
+    "ft": "/Btn"
+  },
+  {
+    "name": "SeparadoaSeparated",
+    "ft": "/Btn"
+  },
+  {
+    "name": "ChkBox-1",
+    "ft": "/Btn"
+  },
+  {
+    "name": "ChkBox-2",
+    "ft": "/Btn"
+  },
+  {
+    "name": "OtrosOther",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Pasaporte ordinarioOrdinary Passport",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Pasaporte diplomáticoDiplomatic passport",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Pasaporte de servicioService",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Pasaporte oficialOfficial passport",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Pasaporte especialSpecial Passport",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Otro documento de viajeOther",
+    "ft": "/Btn"
+  },
+  {
+    "name": "ApellidosSumamefamily name",
+    "ft": "/Tx"
+  },
+  {
+    "name": "NombresFirst names Given names",
+    "ft": "/Tx"
+  },
+  {
+    "name": "1 ApellidosSumames",
+    "ft": "/Tx"
+  },
+  {
+    "name": "2 Apellidos de nacimiento apellidos anterioresSuma",
+    "ft": "/Tx"
+  },
+  {
+    "name": "3 NombresFirst names Given names",
+    "ft": "/Tx"
+  },
+  {
+    "name": "11 Número de documento nacional de identidad si pr",
+    "ft": "/Tx"
+  },
+  {
+    "name": "NacionalidadNationality",
+    "ft": "/Tx"
+  },
+  {
+    "name": "CónyugeSpouse",
+    "ft": "/Btn"
+  },
+  {
+    "name": "HijoaChild",
+    "ft": "/Btn"
+  },
+  {
+    "name": "ChkBox-3",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Ascendiente dependiente Dpendent ascendant",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Pareja de hecho registradaregistered",
+    "ft": "/Btn"
+  },
+  {
+    "name": "OtrasOther",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Números de teléfonoTelephone numbers",
+    "ft": "/Tx"
+  },
+  {
+    "name": "20 Residente en un país distinto del país de nacio",
+    "ft": "/Btn"
+  },
+  {
+    "name": "SiYes Permiso de residencia o documento equivalent",
+    "ft": "/Tx"
+  },
+  {
+    "name": "nnumber",
+    "ft": "/Tx"
+  },
+  {
+    "name": "válido hasta el valid until",
+    "ft": "/Tx"
+  },
+  {
+    "name": "TurismoTourism",
+    "ft": "/Btn"
+  },
+  {
+    "name": "NegociosBusiness",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Visita a familiares o amigosVisiting family or fri",
+    "ft": "/Btn"
+  },
+  {
+    "name": "CulturalCultural",
+    "ft": "/Btn"
+  },
+  {
+    "name": "DeportesSports",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Visita oficial",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Motivos médicosMedical reasons",
+    "ft": "/Btn"
+  },
+  {
+    "name": "EstudiosStudy",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Tránsito aeroportuarioAirport transit",
+    "ft": "/Btn"
+  },
+  {
+    "name": "OtrosOther especifrqueseplease specify",
+    "ft": "/Btn"
+  },
+  {
+    "name": "24 Información adicional sobre el motivo de la est",
+    "ft": "/Tx"
+  },
+  {
+    "name": "26 Estado miembro de primera entradaMember State o",
+    "ft": "/Tx"
+  },
+  {
+    "name": "UnaOne entry",
+    "ft": "/Btn"
+  },
+  {
+    "name": "DosTwo entries",
+    "ft": "/Btn"
+  },
+  {
+    "name": "MúltiplesMultiple entries",
+    "ft": "/Btn"
+  },
+  {
+    "name": "NOno",
+    "ft": "/Btn"
+  },
+  {
+    "name": "SÍyes",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Fecha si se conoceDate if known",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Expedido porTssued by",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Válido desdeValid from",
+    "ft": "/Tx"
+  },
+  {
+    "name": "I3astaUntil",
+    "ft": "/Tx"
+  },
+  {
+    "name": "21 Profesión actual Current occupation",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Números de teléfonoTelephone numbers-0",
+    "ft": "/Tx"
+  },
+  {
+    "name": "32 Nombre y dirección de la empresa u organización",
+    "ft": "/Tx"
+  },
+  {
+    "name": "por el propio solicitante by the applicant himself",
+    "ft": "/Btn"
+  },
+  {
+    "name": "por un patrocinador anfitrión empresa u organizaci",
+    "ft": "/Btn"
+  },
+  {
+    "name": "indicado en las casillas 30 031",
+    "ft": "/Btn"
+  },
+  {
+    "name": "otro especifiquese",
+    "ft": "/Tx"
+  },
+  {
+    "name": "otro especifiquese-0",
+    "ft": "/Btn"
+  },
+  {
+    "name": "EfectivoCash",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Cheques de viajeTravellers cheques",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Tarjeta de créditoCredit card",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Alojamiento ya pagadoPrepaid accomodation",
+    "ft": "/Btn"
+  },
+  {
+    "name": "EfectivoCash-0",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Transporte ya pagadoPrepaid transport",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Se facilita alojamiento al solicitanteAccomodation",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Otros especifiqueseOther please specify",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Todos los gastos de estancia están cubiertosAll ex",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Transporte ya pagado Prepaid transport",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Otros especifiqueseyOther please specify",
+    "ft": "/Btn"
+  },
+  {
+    "name": "Número de teléfono  Phone number",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Lugar y fechaPlace and date",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto1",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto2",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto3",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto4",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto5",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto6",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto7",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto8",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto9",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto10",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto11",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto12",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto13",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto14",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto15",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto16",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto17",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto18",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto19",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto20",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto21",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto22",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto23",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto24",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto25",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto26",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto27",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto28",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto29",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto30",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto31",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Texto32",
+    "ft": "/Tx"
+  },
+  {
+    "name": "Firma33",
+    "ft": "/Sig"
+  }
+]

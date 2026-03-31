@@ -1,0 +1,12 @@
+{
+  "structured": {
+    "nationality": "NacionalidadNationality"
+  },
+  "texto": {
+    "maid_date_of_birth": "Texto2",
+    "passport_number": "Texto9"
+  },
+  "checkbox": {
+    "sex_female": "MujerFemale"
+  }
+}

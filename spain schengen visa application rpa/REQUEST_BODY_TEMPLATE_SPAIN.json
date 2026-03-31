@@ -1,0 +1,76 @@
+{
+  "use_business_merge": true,
+  "pdf_fields": {},
+
+  "maid_surname": "",
+  "maid_surname_at_birth": "",
+  "maid_first_names": "",
+  "maid_date_of_birth": "",
+  "maid_place_of_birth": "",
+  "country_of_birth": "",
+
+  "nationality": "",
+  "nationality_line_top": "",
+  "nationality_line_bottom": "",
+
+  "maid_gender": "",
+  "sex_male": false,
+  "sex_female": false,
+
+  "marital_status": "",
+  "marital_status_single": false,
+  "marital_status_married": false,
+
+  "passport_number": "",
+  "passport_issue_date": "",
+  "passport_expiry_date": "",
+  "passport_issuing_country": "",
+
+  "maid_address": "",
+  "maid_email": "",
+  "maid_phone": "",
+
+  "maid_uae_resident": false,
+  "uae_residence_visa_number": "",
+  "uae_residence_visa_expiry": "",
+
+  "occupation": "Domestic Worker",
+  "employer_sponsor_address": "Maids CC Domestic Workers Services - Umm Suqeim Street, Al Barsha 2, Dubai",
+
+  "purpose_tourism": true,
+  "purpose_additional_info": "I will be accompanying my employer to continue my regular domestic duties and I will return with them after the trip.",
+
+  "destination_member_state_line": "Spain",
+  "first_entry_member_state": "Spain",
+
+  "number_of_entries": "single",
+  "entries_one": true,
+  "entries_two": false,
+  "entries_multiple": false,
+
+  "arrival_date": "",
+  "departure_date": "",
+
+  "schengen_visa_before": false,
+
+  "client_is_travel_companion": true,
+  "client_name": "",
+  "client_hotel_address": "",
+  "client_email": "",
+  "client_phone": "",
+
+  "companion_name": "",
+  "companion_hotel_address": "",
+  "companion_email": "",
+  "companion_phone": "",
+
+  "all_expenses_covered_during_stay": true,
+
+  "sponsor_client_name": "",
+  "sponsor_client_email": "",
+  "client_erp_address": "",
+  "sponsor_client_phone": "",
+
+  "place_and_date": ""
+}
+
