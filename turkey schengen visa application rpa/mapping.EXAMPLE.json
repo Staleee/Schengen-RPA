@@ -1,0 +1,7 @@
+{
+  "fields": {
+    "maid_surname": { "page": 1, "x": 100, "y": 200, "font_size": 9 },
+    "maid_first_names": { "page": 1, "x": 100, "y": 220, "font_size": 9 }
+  }
+}
+
