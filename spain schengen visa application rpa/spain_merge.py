@@ -29,6 +29,13 @@ def _truthy(v: Any) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes", "y", "on")
 
 
+def _nonempty_str(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s if s else None
+
+
 def resolve_travel_partner_contact(b: Dict[str, Any]) -> Dict[str, Optional[str]]:
     if _truthy(b.get("client_is_travel_companion")):
         return {
@@ -82,8 +89,13 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
         out["nationality_line_top"] = b.get("nationality_line_top") or b["nationality"]
         out["nationality_line_bottom"] = b.get("nationality_line_bottom") or b.get("nationality_second_line") or b["nationality"]
 
-    # §19: address + email in one field (Texto18)
-    addr, em = b.get("maid_address"), b.get("maid_email")
+    # §19: maid home address + maid email only → Texto18 (no client email here)
+    addr = _nonempty_str(
+        b.get("maid_address")
+        or b.get("maid_full_address")
+        or b.get("maid_home_address")
+    )
+    em = _nonempty_str(b.get("maid_email"))
     if addr or em:
         out["maid_address_email_combined"] = "\n".join(x for x in (addr, em) if x)
 
@@ -108,12 +120,12 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     if "occupation" not in out:
         out["occupation"] = "Domestic Worker"
-    if "employer_block_text" in b:
-        out["employer_block_text"] = b["employer_block_text"]
-    elif "employer_sponsor_address" in b:
-        out["employer_block_text"] = b["employer_sponsor_address"]
-    else:
-        out.setdefault("employer_block_text", DEFAULT_EMPLOYER_BLOCK)
+    eb = _nonempty_str(b.get("employer_block_text"))
+    if eb is None:
+        eb = _nonempty_str(b.get("employer_sponsor_address"))
+    if eb is None:
+        eb = DEFAULT_EMPLOYER_BLOCK
+    out["employer_block_text"] = eb
     if "purpose_additional_info" not in out:
         out["purpose_additional_info"] = DEFAULT_PURPOSE_24
     if "first_entry_member_state" not in out:
@@ -167,23 +179,36 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
         out["departure_date"] = b["departure_date"]
 
     tp = resolve_travel_partner_contact(b)
-    if tp["name"]:
-        out["host_travel_name"] = tp["name"]
-    if tp["address"]:
-        out["host_travel_address"] = tp["address"]
-    if tp["email"]:
-        out["host_travel_email"] = tp["email"]
+    n, ad = _nonempty_str(tp["name"]), _nonempty_str(tp["address"])
+    em = _nonempty_str(tp["email"])
+    # §31 upper (Texto25): client/travel name, then hotel/address
+    if n or ad:
+        out["host_upper_name_hotel_stacked"] = "\n".join(x for x in (n, ad) if x)
+    # §31 lower (Texto26): client email, then hotel/address
+    if em or ad:
+        out["host_lower_email_hotel_stacked"] = "\n".join(x for x in (em, ad) if x)
     if tp["phone"]:
         out["host_travel_phone"] = tp["phone"]
 
-    s_name = b.get("sponsor_client_name") or b.get("client_name")
-    if s_name:
-        out.setdefault("sponsor_display_name", s_name)
-
-    s_email = b.get("sponsor_client_email") or b.get("client_email")
-    s_addr = b.get("sponsor_client_address") or b.get("client_erp_address") or b.get("client_address")
-    if s_email or s_addr:
-        out["sponsor_email_address_block"] = "\n".join(x for x in (s_email, s_addr) if x)
+    # §34: Texto31 = client name; Texto32 = ERP address + client email
+    c_name = (
+        _nonempty_str(b.get("client_name"))
+        or _nonempty_str(b.get("client_full_name"))
+        or _nonempty_str(b.get("sponsor_client_name"))
+    )
+    if c_name:
+        out["sponsor_section_client_name"] = c_name
+    erp_addr = (
+        _nonempty_str(b.get("client_erp_address"))
+        or _nonempty_str(b.get("sponsor_client_address"))
+        or _nonempty_str(b.get("client_address"))
+    )
+    c_em = _nonempty_str(b.get("client_email")) or _nonempty_str(b.get("sponsor_client_email"))
+    if erp_addr or c_em:
+        parts = [x for x in (erp_addr, c_em) if x]
+        if len(parts) == 2 and parts[0] == parts[1]:
+            parts = [parts[0]]
+        out["sponsor_section_address_email_stacked"] = "\n".join(parts)
 
     s_phone = b.get("sponsor_client_phone") or b.get("client_phone")
     if s_phone:
@@ -191,8 +216,8 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     if "all_expenses_covered_during_stay" not in out:
         out["all_expenses_covered_during_stay"] = True
-    if "costs_paid_by_sponsor_host" not in out:
-        out["costs_paid_by_sponsor_host"] = True
+    # "por un patrocinador anfitrión…" — default off; set `costs_paid_by_sponsor_host`: true to tick
+    out["costs_paid_by_sponsor_host"] = _truthy(b.get("costs_paid_by_sponsor_host"))
 
     if not out.get("place_and_date"):
         out["place_and_date"] = f"{DEFAULT_PLACE_COUNTRY}, {_today_dd_mm_yyyy()}"

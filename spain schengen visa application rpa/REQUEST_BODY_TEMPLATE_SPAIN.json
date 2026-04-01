@@ -65,6 +65,7 @@
   "companion_phone": "",
 
   "all_expenses_covered_during_stay": true,
+  "costs_paid_by_sponsor_host": false,
 
   "sponsor_client_name": "",
   "sponsor_client_email": "",

@@ -24,6 +24,7 @@
   "client_is_travel_companion": true,
   "client_name": "Ahmed Test Client",
   "client_hotel_address": "Hotel Example, Madrid",
+  "client_erp_address": "Villa 1, Al Barsha 2, Dubai, UAE",
   "client_email": "client@example.ae",
   "client_phone": "971509876543"
 }

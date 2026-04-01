@@ -52,11 +52,12 @@ TEXTO_FIELD_MAP: Dict[str, str] = {
     "destination_member_state_line": "Texto21",
     "arrival_date": "Texto22",
     "departure_date": "Texto23",
-    "host_travel_name": "Texto25",
-    "host_travel_email": "Texto26",
-    "host_travel_address": "Texto27",
-    "sponsor_display_name": "Texto31",
-    "sponsor_email_address_block": "Texto32",
+    # §31 host/travel: upper = client name + hotel; lower = client email + hotel
+    "host_upper_name_hotel_stacked": "Texto25",
+    "host_lower_email_hotel_stacked": "Texto26",
+    # §34 costs / sponsor: name, then address + client email below
+    "sponsor_section_client_name": "Texto31",
+    "sponsor_section_address_email_stacked": "Texto32",
 }
 
 CHECKBOX_ALIASES: Dict[str, str] = {
@@ -83,6 +84,16 @@ CHECKBOX_ALIASES: Dict[str, str] = {
 # Section 31 host phone (page 3) — distinct from maid phone on page 2
 HOST_TRAVEL_PHONE_PDF = "Números de teléfonoTelephone numbers-0"
 SPONSOR_PHONE_PDF = "Número de teléfono  Phone number"
+
+# Printed “32” (company name/address) — leave blank per ops; not the same as generic `Texto32`.
+FIELD_32_COMPANY_LINE = "32 Nombre y dirección de la empresa u organización"
+
+# Cleared unless caller passes them in `pdf_fields` (applied before pdf_fields merge).
+FORCE_EMPTY_UNLESS_PDF_FIELDS: Tuple[str, ...] = (
+    "Texto17",
+    "Texto27",
+    FIELD_32_COMPANY_LINE,
+)
 
 
 def _load_effective_maps() -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
@@ -144,6 +155,9 @@ def _build_updates(structured: Dict[str, Any], pdf_fields: Optional[Dict[str, st
     if structured.get("sponsor_client_phone_line"):
         out[SPONSOR_PHONE_PDF] = str(structured["sponsor_client_phone_line"]).strip()
 
+    for fn in FORCE_EMPTY_UNLESS_PDF_FIELDS:
+        out[fn] = ""
+
     if pdf_fields:
         for k, v in pdf_fields.items():
             if v is None:
@@ -165,7 +179,13 @@ def _fill_with_fitz(template: Path, updates: Dict[str, str]) -> bytes:
 
     doc = fitz.open(path_str)
     try:
+        # Single appearance pass (helps some viewers); duplicate AcroForm widgets are handled below
+        try:
+            doc.need_appearances = True
+        except (AttributeError, RuntimeError):
+            pass
         cb = fitz.PDF_WIDGET_TYPE_CHECKBOX
+        text_field_seen: set[str] = set()
         for i in range(len(doc)):
             for w in doc[i].widgets() or []:
                 fn = w.field_name
@@ -176,9 +196,17 @@ def _fill_with_fitz(template: Path, updates: Dict[str, str]) -> bytes:
                     sval = str(val).strip()
                     is_on = sval in ("/On", "/Yes", "Yes", "on", "On", "true", "True", "1")
                     w.field_value = is_on
+                    w.update()
                 else:
+                    # BLS template often has two widgets sharing the same field name; updating both
+                    # can draw overlapping text. Only the first text widget per name gets the value.
+                    if fn in text_field_seen:
+                        w.field_value = ""
+                        w.update()
+                        continue
+                    text_field_seen.add(fn)
                     w.field_value = str(val)
-                w.update()
+                    w.update()
         return doc.tobytes()
     finally:
         doc.close()
