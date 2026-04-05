@@ -18,9 +18,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV PYTHONUNBUFFERED=1
-# LibreOffice PDF: bracket marks + larger font so ticks stay readable.
-ENV TURKEY_CHECKBOX_ASCII=1
-ENV TURKEY_CHECKBOX_FONT_PT=16
 
 # Railway sets PORT; default 8092 for local docker run
 CMD ["sh", "-c", "exec uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8092}"]

@@ -4,7 +4,7 @@
 
 1. Save the application as **`.docx`** (Word; not legacy `.doc`) in **`assets/`** (e.g. `tvisaform.docx`) **or** in this folder’s root with the same names — or set env **`TURKEY_WORD_TEMPLATE`** to the full path.
 2. Use **`{placeholder}`** (single braces) for fields you want the API to fill.
-3. For **section 6 (sex)** and **section 8 (marital status)**, put tiny tokens in or beside each box. **Short:** `{6m}` `{6f}`; marital `{8s}` / `{8m}` and/or `{8a}` … `{8f}`. **LibreOffice → PDF:** Dockerfile sets **`TURKEY_CHECKBOX_ASCII=1`** → **`[X]`** / **`[ ]`** (readable) and **`TURKEY_CHECKBOX_FONT_PT=16`** so only those mark runs use a larger point size. Unicode ☑/☐ still works locally if ASCII is off.
+3. For **section 6 (sex)** and **section 8 (marital status)**, put tiny tokens in or beside each box. **Short:** `{6m}` `{6f}`; marital `{8s}` / `{8m}` and/or `{8a}` … `{8f}`. Replaced tokens use **☑** / **☐** (same styling as your template; we do not resize or switch to ASCII).
 4. **§24 / §25 (Turkey history):** `{24y}` `{24n}` (visited Turkey before), `{25y}` `{25n}` (deported/refused before). JSON (preferred): `maid_traveled_to_turkey_before`, `maid_deported_from_turkey_before` (`yes`/`no` or bool). Legacy keys `traveled_turkey_before`, `deported_from_turkey_before` still work. You can also use `{maid_traveled_to_turkey_before}` / `{maid_deported_from_turkey_before}` as plain text placeholders in Word.
 5. **`client_email`:** Use JSON key `client_email`. If the Word token is misspelled as `{client)email}`, it is filled from the same value.
 6. **`{port}`:** Send **`port`**. **`{means_of_transport}`:** Send **`means_of_transport`** (e.g. `Air`).
@@ -38,7 +38,6 @@ Default URL: `http://127.0.0.1:8092`
 3. If the build uses **Nixpacks** instead, **`nixpacks.toml`** adds the same APT packages.
 4. Ensure your **`.docx` template** is in the image (e.g. under `assets/`) or set **`TURKEY_WORD_TEMPLATE`** to a path inside the container.
 5. **`PORT`** is set by Railway; the image uses `$PORT` at runtime.
-6. The image sets **`TURKEY_CHECKBOX_ASCII=1`** and **`TURKEY_CHECKBOX_FONT_PT=16`** for readable checkbox marks in LibreOffice PDFs.
 
 ## Generate overlay PNGs (after adding the PDF)
 
