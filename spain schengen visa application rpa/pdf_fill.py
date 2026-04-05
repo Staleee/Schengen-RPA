@@ -22,8 +22,6 @@ STRUCTURED_FIELD_MAP: Dict[str, str] = {
     "surname_line_1": "1 ApellidosSumames",
     "surname_at_birth": "2 Apellidos de nacimiento apellidos anterioresSuma",
     "given_names_line_3": "3 NombresFirst names Given names",
-    "footer_surname": "ApellidosSumamefamily name",
-    "footer_given_names": "NombresFirst names Given names",
     "national_id_number": "11 Número de documento nacional de identidad si pr",
     "phone": "Números de teléfonoTelephone numbers",
     "residence_permit_details": "SiYes Permiso de residencia o documento equivalent",
@@ -95,6 +93,12 @@ FORCE_EMPTY_UNLESS_PDF_FIELDS: Tuple[str, ...] = (
     FIELD_32_COMPANY_LINE,
 )
 
+# Page-1 footer repeats of §1 / §3 — ops leave blank (not a second copy of surname/given names).
+FOOTER_NAME_FIELDS_ALWAYS_BLANK: Tuple[str, ...] = (
+    "ApellidosSumamefamily name",
+    "NombresFirst names Given names",
+)
+
 
 def _load_effective_maps() -> Tuple[Dict[str, str], Dict[str, str], Dict[str, str]]:
     structured = dict(STRUCTURED_FIELD_MAP)
@@ -163,6 +167,9 @@ def _build_updates(structured: Dict[str, Any], pdf_fields: Optional[Dict[str, st
             if v is None:
                 continue
             out[str(k).strip()] = str(v).strip()
+
+    for fn in FOOTER_NAME_FIELDS_ALWAYS_BLANK:
+        out[fn] = ""
 
     return out
 

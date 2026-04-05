@@ -48,7 +48,7 @@ Bundled PDF uses **exact AcroForm names** from `PDF_FIELD_CATALOG.json`. If your
 | — | Unused | — | **`Texto27`** left blank by default |
 | — | Place & date | `place_and_date` (default UAE + today) | `Lugar y fechaPlace and date` |
 
-Footer mirror (page 1): `ApellidosSumamefamily name`, `NombresFirst names Given names` ← same as 1 & 3 unless `skip_footer_name_mirror`.
+Footer repeat labels (page 1): `ApellidosSumamefamily name`, `NombresFirst names Given names` — **always left blank** (not filled from maid name).
 
 ---
 

@@ -89,15 +89,26 @@ def _normalize_marital(raw: str) -> str:
     return aliases.get(s, s)
 
 
+def _checkbox_marks() -> Tuple[str, str]:
+    """
+    Checked / unchecked mark for Word. Unicode works in Word; LibreOffice PDF conversion
+    often shrinks or garbles U+2610/U+2611 — set TURKEY_CHECKBOX_ASCII=1 for X / o.
+    """
+    if os.environ.get("TURKEY_CHECKBOX_ASCII", "").strip().lower() in ("1", "true", "yes", "on"):
+        return "X", "-"
+    return "☑", "☐"
+
+
 def checkbox_placeholders(sex: Any, marital_status: Any) -> Dict[str, str]:
-    """☑ / ☐ for Word next to each option (sections 6 and 8)."""
+    """Checked / unchecked tokens for Word next to each option (sections 6 and 8)."""
+    chk, uchk = _checkbox_marks()
     s = str(sex or "").strip().lower()
     if s in ("m", "male", "man", "1"):
-        male, female = "☑", "☐"
+        male, female = chk, uchk
     elif s in ("f", "female", "woman", "2"):
-        male, female = "☐", "☑"
+        male, female = uchk, chk
     else:
-        male, female = "☐", "☐"
+        male, female = uchk, uchk
 
     m = _normalize_marital(str(marital_status or ""))
     opts = ("single", "married", "separated", "divorced", "widowed", "other")
@@ -106,7 +117,7 @@ def checkbox_placeholders(sex: Any, marital_status: Any) -> Dict[str, str]:
         "sex_check_female": female,
     }
     for opt in opts:
-        out[f"marital_check_{opt}"] = "☑" if m == opt else "☐"
+        out[f"marital_check_{opt}"] = chk if m == opt else uchk
     # Compact §6 / §8 tokens (same values as long names; easier on layout)
     out["6m"] = out["sex_check_male"]
     out["6f"] = out["sex_check_female"]
@@ -137,6 +148,7 @@ def _truthy_tristate(v: Any) -> Optional[bool]:
 
 def turkey_history_checkboxes(flat: Dict[str, Any]) -> Dict[str, str]:
     """§24 visited Turkey before → {24y}/{24n}; §25 deported/refused → {25y}/{25n}."""
+    chk, uchk = _checkbox_marks()
     visited = _truthy_tristate(
         flat.get("maid_traveled_to_turkey_before")
         or flat.get("traveled_turkey_before")
@@ -144,11 +156,11 @@ def turkey_history_checkboxes(flat: Dict[str, Any]) -> Dict[str, str]:
         or flat.get("turkey_visited_before")
     )
     if visited is True:
-        y24, n24 = "☑", "☐"
+        y24, n24 = chk, uchk
     elif visited is False:
-        y24, n24 = "☐", "☑"
+        y24, n24 = uchk, chk
     else:
-        y24, n24 = "☐", "☐"
+        y24, n24 = uchk, uchk
 
     deported = _truthy_tristate(
         flat.get("maid_deported_from_turkey_before")
@@ -158,11 +170,11 @@ def turkey_history_checkboxes(flat: Dict[str, Any]) -> Dict[str, str]:
         or flat.get("turkey_deported_before")
     )
     if deported is True:
-        y25, n25 = "☑", "☐"
+        y25, n25 = chk, uchk
     elif deported is False:
-        y25, n25 = "☐", "☑"
+        y25, n25 = uchk, chk
     else:
-        y25, n25 = "☐", "☐"
+        y25, n25 = uchk, uchk
 
     return {"24y": y24, "24n": n24, "25y": y25, "25n": n25}
 
@@ -215,40 +227,43 @@ def _parse_flexible_date(val: Any) -> Optional[date]:
     return None
 
 
-# Normalized JSON keys that count as arrival / departure (camelCase + variants).
-_ARRIVAL_DATE_KEYS_NK = frozenset(
-    {
-        "arrival_date",
-        "arrivaldate",
-        "date_of_arrival",
-        "travel_arrival_date",
-        "travel_arrival",
-        "start_date",
-        "stay_from",
-    }
+# Only unambiguous travel keys — NOT start_date/end_date/stay_from (Zoho often maps those
+# to unrelated ranges and blows up day counts into thousands).
+_VISA_ARRIVAL_KEYS_ORDER: Tuple[str, ...] = (
+    "arrival_date",
+    "arrivaldate",
+    "date_of_arrival",
+    "travel_arrival_date",
 )
-_DEPARTURE_DATE_KEYS_NK = frozenset(
-    {
-        "departure_date",
-        "departuredate",
-        "date_of_departure",
-        "travel_departure_date",
-        "travel_departure",
-        "end_date",
-        "stay_until",
-    }
+_VISA_DEPARTURE_KEYS_ORDER: Tuple[str, ...] = (
+    "departure_date",
+    "departuredate",
+    "date_of_departure",
+    "travel_departure_date",
 )
 
 
-def _first_date_from_flat(flat: Dict[str, Any], allowed_normalized_keys: frozenset) -> Optional[date]:
-    """Pick first parseable date from flat whose key normalizes to an allowed alias."""
+def _visa_date_from_flat(flat: Dict[str, Any], ordered_normalized_keys: Tuple[str, ...]) -> Optional[date]:
+    """First non-empty value wins, in stable priority order (not dict iteration order)."""
+    by_nk: Dict[str, Any] = {}
     for k, v in flat.items():
         nk = normalize_key(str(k))
-        if nk in allowed_normalized_keys:
-            d = _parse_flexible_date(v)
+        if nk and nk not in by_nk:
+            by_nk[nk] = v
+    for nk in ordered_normalized_keys:
+        if nk in by_nk:
+            d = _parse_flexible_date(by_nk[nk])
             if d is not None:
                 return d
     return None
+
+
+def _max_visa_stay_days_sane() -> int:
+    """Reject absurd spans (wrong fields parsed as dates). Override via TURKEY_VISA_MAX_STAY_DAYS."""
+    try:
+        return max(31, min(3660, int(os.environ.get("TURKEY_VISA_MAX_STAY_DAYS", "370"))))
+    except ValueError:
+        return 370
 
 
 def compute_inclusive_stay_days(flat: Dict[str, Any]) -> Optional[int]:
@@ -258,15 +273,19 @@ def compute_inclusive_stay_days(flat: Dict[str, Any]) -> Optional[int]:
     Example: arrival 01/04/2026, departure 15/04/2026 -> 15 days
     (present on 1 Apr and 15 Apr, plus 13 days in between = 15).
 
-    Returns None if dates missing, unparseable, or departure before arrival.
+    Returns None if dates missing, unparseable, departure before arrival, or span over sanity cap.
     """
-    arr = _first_date_from_flat(flat, _ARRIVAL_DATE_KEYS_NK)
-    dep = _first_date_from_flat(flat, _DEPARTURE_DATE_KEYS_NK)
+    arr = _visa_date_from_flat(flat, _VISA_ARRIVAL_KEYS_ORDER)
+    dep = _visa_date_from_flat(flat, _VISA_DEPARTURE_KEYS_ORDER)
     if arr is None or dep is None:
         return None
     if dep < arr:
         return None
-    return (dep - arr).days + 1
+    days = (dep - arr).days + 1
+    cap = _max_visa_stay_days_sane()
+    if days > cap:
+        return None
+    return days
 
 
 def build_replacements(flat: Dict[str, Any]) -> Dict[str, str]:

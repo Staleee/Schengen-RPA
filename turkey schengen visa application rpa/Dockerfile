@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV PYTHONUNBUFFERED=1
+# LibreOffice PDF often garbles Unicode ballot boxes (U+2610/U+2611); ASCII marks survive better.
+ENV TURKEY_CHECKBOX_ASCII=1
 
 # Railway sets PORT; default 8092 for local docker run
 CMD ["sh", "-c", "exec uvicorn api_server:app --host 0.0.0.0 --port ${PORT:-8092}"]

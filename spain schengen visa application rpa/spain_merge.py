@@ -222,11 +222,8 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     if not out.get("place_and_date"):
         out["place_and_date"] = f"{DEFAULT_PLACE_COUNTRY}, {_today_dd_mm_yyyy()}"
 
-    if not _truthy(b.get("skip_footer_name_mirror")):
-        if out.get("surname_line_1"):
-            out.setdefault("footer_surname", out["surname_line_1"])
-        if out.get("given_names_line_3"):
-            out.setdefault("footer_given_names", out["given_names_line_3"])
+    # §1/§3 footer repeats (`ApellidosSumamefamily name`, `NombresFirst names Given names`):
+    # left blank in pdf_fill — do not mirror surname / given names here.
 
     # §9 Marital: Single = ChkBox, Married = ChkBox-0
     if _truthy(b.get("marital_status_single")) or str(b.get("marital_status", "")).lower() == "single":
