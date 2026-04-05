@@ -31,6 +31,14 @@ cd "turkey schengen visa application rpa"
 
 Default URL: `http://127.0.0.1:8092`
 
+## Railway
+
+1. Create a service and set **Root directory** to `turkey schengen visa application rpa` (this folder).
+2. **Dockerfile** in this folder installs **LibreOffice** so **`POST /fill-docx-pdf`** returns PDF instead of **503**. Railway usually picks the Dockerfile automatically when it is present.
+3. If the build uses **Nixpacks** instead, **`nixpacks.toml`** adds the same APT packages.
+4. Ensure your **`.docx` template** is in the image (e.g. under `assets/`) or set **`TURKEY_WORD_TEMPLATE`** to a path inside the container.
+5. **`PORT`** is set by Railway; the image uses `$PORT` at runtime.
+
 ## Generate overlay PNGs (after adding the PDF)
 
 ```powershell

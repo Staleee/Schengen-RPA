@@ -1,0 +1,3 @@
+# If Railway builds with Nixpacks (not Docker), install LibreOffice for /fill-docx-pdf.
+[phases.setup]
+aptPkgs = ["libreoffice-writer", "fontconfig", "fonts-dejavu-core"]
