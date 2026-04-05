@@ -13,7 +13,7 @@ Bundled PDF uses **exact AcroForm names** from `PDF_FIELD_CATALOG.json`. If your
 | 3 | First name | `maid_first_names`, `first_name` | `3 NombresFirst names Given names` |
 | 4 | Maid DOB | `maid_date_of_birth` | `Texto1` |
 | 5 | Place of birth | `maid_place_of_birth` | `Texto2` |
-| 6 | Country of birth | `country_of_birth` | `Texto3` |
+| 6 | Country of birth | **`nationality`** drives `Texto3` (merge overwrites any `country_of_birth`; demonym→country e.g. Filipino→Philippines) | `Texto3` |
 | 7 | Nationality (two lines) | `nationality` (+ optional `nationality_line_top`, `nationality_line_bottom`) | `Texto4`, `Texto5` |
 | 8 | Gender | `maid_gender` or `sex_male` / `sex_female` | `VarónMale`, `MujerFemale` |
 | 9 | Marital | `marital_status_single` or `marital_status: "single"` | `ChkBox` |

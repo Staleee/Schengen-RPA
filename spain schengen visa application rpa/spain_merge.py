@@ -36,6 +36,47 @@ def _nonempty_str(v: Any) -> Optional[str]:
     return s if s else None
 
 
+# Zoho often sends only `nationality` (demonym). §6 país de nacimiento / Texto3 wants a country name.
+_DEMONYM_OR_ALIAS_TO_COUNTRY: Dict[str, str] = {
+    "filipino": "Philippines",
+    "filipina": "Philippines",
+    "indian": "India",
+    "pakistani": "Pakistan",
+    "bangladeshi": "Bangladesh",
+    "nepali": "Nepal",
+    "nepalese": "Nepal",
+    "sri lankan": "Sri Lanka",
+    "indonesian": "Indonesia",
+    "ethiopian": "Ethiopia",
+    "ugandan": "Uganda",
+    "kenyan": "Kenya",
+    "ghanaian": "Ghana",
+    "nigerian": "Nigeria",
+    "egyptian": "Egypt",
+    "jordanian": "Jordan",
+    "lebanese": "Lebanon",
+    "syrian": "Syria",
+    "sudanese": "Sudan",
+    "vietnamese": "Vietnam",
+    "thai": "Thailand",
+    "chinese": "China",
+    "russian": "Russia",
+    "ukrainian": "Ukraine",
+    "american": "United States",
+    "british": "United Kingdom",
+    "brit": "United Kingdom",
+}
+
+
+def _country_name_for_birth_field(nationality_value: str) -> str:
+    """Map common nationality strings to country; otherwise return trimmed input (e.g. already 'Philippines')."""
+    raw = str(nationality_value).strip()
+    if not raw:
+        return raw
+    key = raw.lower()
+    return _DEMONYM_OR_ALIAS_TO_COUNTRY.get(key, raw)
+
+
 def resolve_travel_partner_contact(b: Dict[str, Any]) -> Dict[str, Optional[str]]:
     if _truthy(b.get("client_is_travel_companion")):
         return {
@@ -88,6 +129,11 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     if "nationality" in b:
         out["nationality_line_top"] = b.get("nationality_line_top") or b["nationality"]
         out["nationality_line_bottom"] = b.get("nationality_line_bottom") or b.get("nationality_second_line") or b["nationality"]
+
+    # §6 Country of birth (Texto3): always set from nationality when present (payload often duplicates demonym).
+    nat = _nonempty_str(b.get("nationality"))
+    if nat:
+        out["country_of_birth"] = _country_name_for_birth_field(nat)
 
     # §19: maid home address + maid email only → Texto18 (no client email here)
     addr = _nonempty_str(

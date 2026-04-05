@@ -35,7 +35,7 @@ Both can be enabled together. The logged object is the **full** parsed body (inc
 
 | Area | Example keys |
 |------|----------------|
-| Maid identity | `maid_surname`, `maid_surname_at_birth`, `maid_first_names`, `maid_date_of_birth`, `maid_place_of_birth`, `country_of_birth`, `nationality`, `maid_gender` |
+| Maid identity | `maid_surname`, `maid_surname_at_birth`, `maid_first_names`, `maid_date_of_birth`, `maid_place_of_birth`, **`country_of_birth`** (ignored when **`nationality`** is sent — §6 / `Texto3` is always filled from nationality: demonym→country e.g. *Filipino*→*Philippines*), `nationality`, `maid_gender` |
 | Passport | `passport_number`, `passport_issue_date`, `passport_expiry_date`, `passport_issuing_country` |
 | Maid contact | `maid_address`, `maid_email`, `maid_phone` |
 | UAE residence (§20) | `maid_uae_resident`, `uae_residence_visa_number`, `uae_residence_visa_expiry` |
