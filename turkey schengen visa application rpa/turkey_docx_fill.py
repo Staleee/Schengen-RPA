@@ -18,7 +18,7 @@ JSON (preferred): `maid_traveled_to_turkey_before`, `maid_deported_from_turkey_b
 
 **Client email typo in Word:** `{client)email}` maps to the same value as `client_email`.
 
-**Visa duration:** If `arrival_date` and `departure_date` parse, `visa_duration` is set to inclusive day count (e.g. `14 days`) unless you already send a non-empty `visa_duration`.
+**Visa duration:** If `arrival_date` and `departure_date` parse, `visa_duration` is set to inclusive day count unless you send a non-empty `visa_duration`. Dates: **`dd.MM.yyyy` (Zoho)** tried first, then `dd/mm/yyyy`, `yyyy-mm-dd`, etc.
 """
 
 from __future__ import annotations
@@ -167,9 +167,12 @@ def turkey_history_checkboxes(flat: Dict[str, Any]) -> Dict[str, str]:
     return {"24y": y24, "24n": n24, "25y": y25, "25n": n25}
 
 
+# Zoho often sends dd.MM.yyyy — try dotted forms first to avoid any ambiguity with slashes.
 _DATE_FORMATS = (
-    "%d/%m/%Y",
     "%d.%m.%Y",
+    "%d.%m.%y",
+    "%d/%m/%Y",
+    "%d/%m/%y",
     "%Y-%m-%d",
     "%d-%m-%Y",
     "%d %B %Y",
@@ -177,12 +180,33 @@ _DATE_FORMATS = (
 )
 
 
+def _normalize_date_string(s: str) -> str:
+    """Make Zoho / copy-paste variants parseable (Unicode dots, thin spaces)."""
+    t = s.replace("\u00a0", " ").replace("\u2009", " ").strip()
+    t = t.replace("．", ".").replace("·", ".").replace("∙", ".")
+    # "01,04,2026" or "01-04-2026" already handled by format list; optional comma as sep
+    if re.match(r"^\d{1,2},\d{1,2},\d{4}$", t):
+        t = t.replace(",", ".")
+    return t
+
+
 def _parse_flexible_date(val: Any) -> Optional[date]:
     if val is None:
         return None
+    if isinstance(val, date) and not isinstance(val, datetime):
+        return val
+    if isinstance(val, datetime):
+        return val.date()
     s = str(val).strip()
     if not s:
         return None
+    # ISO date or datetime prefix: 2026-04-01 or 2026-04-01T12:00:00Z
+    if len(s) >= 10 and s[4:5] == "-" and s[7:8] == "-":
+        try:
+            return datetime.strptime(s[:10], "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    s = _normalize_date_string(s)
     for fmt in _DATE_FORMATS:
         try:
             return datetime.strptime(s, fmt).date()
@@ -191,10 +215,53 @@ def _parse_flexible_date(val: Any) -> Optional[date]:
     return None
 
 
+# Normalized JSON keys that count as arrival / departure (camelCase + variants).
+_ARRIVAL_DATE_KEYS_NK = frozenset(
+    {
+        "arrival_date",
+        "arrivaldate",
+        "date_of_arrival",
+        "travel_arrival_date",
+        "travel_arrival",
+        "start_date",
+        "stay_from",
+    }
+)
+_DEPARTURE_DATE_KEYS_NK = frozenset(
+    {
+        "departure_date",
+        "departuredate",
+        "date_of_departure",
+        "travel_departure_date",
+        "travel_departure",
+        "end_date",
+        "stay_until",
+    }
+)
+
+
+def _first_date_from_flat(flat: Dict[str, Any], allowed_normalized_keys: frozenset) -> Optional[date]:
+    """Pick first parseable date from flat whose key normalizes to an allowed alias."""
+    for k, v in flat.items():
+        nk = normalize_key(str(k))
+        if nk in allowed_normalized_keys:
+            d = _parse_flexible_date(v)
+            if d is not None:
+                return d
+    return None
+
+
 def compute_inclusive_stay_days(flat: Dict[str, Any]) -> Optional[int]:
-    """Days from arrival through departure inclusive (trip length)."""
-    arr = _parse_flexible_date(flat.get("arrival_date"))
-    dep = _parse_flexible_date(flat.get("departure_date"))
+    """
+    Calendar days from arrival through departure, **inclusive** (both endpoints count).
+
+    Example: arrival 01/04/2026, departure 15/04/2026 -> 15 days
+    (present on 1 Apr and 15 Apr, plus 13 days in between = 15).
+
+    Returns None if dates missing, unparseable, or departure before arrival.
+    """
+    arr = _first_date_from_flat(flat, _ARRIVAL_DATE_KEYS_NK)
+    dep = _first_date_from_flat(flat, _DEPARTURE_DATE_KEYS_NK)
     if arr is None or dep is None:
         return None
     if dep < arr:
@@ -218,7 +285,7 @@ def build_replacements(flat: Dict[str, Any]) -> Dict[str, str]:
     if days is not None:
         existing = str(flat.get("visa_duration") or "").strip()
         if not existing:
-            values["visa_duration"] = f"{days} days"
+            values["visa_duration"] = "1 day" if days == 1 else f"{days} days"
 
     for ck, cv in cb.items():
         values[ck] = cv
