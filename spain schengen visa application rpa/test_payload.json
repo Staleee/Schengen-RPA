@@ -1,30 +1,76 @@
 {
+  "use_business_merge": true,
+  "pdf_fields": {},
+
   "maid_surname": "Santos",
   "maid_surname_at_birth": "Santos",
-  "maid_first_names": "Maria",
+  "maid_first_names": "Maria Reyes",
   "maid_date_of_birth": "22/05/1990",
   "maid_place_of_birth": "Manila",
   "country_of_birth": "Philippines",
+
   "nationality": "Filipino",
+  "nationality_line_top": "Filipino",
+  "nationality_line_bottom": "",
+
   "maid_gender": "female",
+  "sex_male": false,
+  "sex_female": true,
+
+  "marital_status": "single",
   "marital_status_single": true,
+  "marital_status_married": false,
+
   "passport_number": "P1234567",
   "passport_issue_date": "01/01/2020",
   "passport_expiry_date": "01/01/2030",
   "passport_issuing_country": "Philippines",
-  "maid_address": "Dubai, UAE",
-  "maid_email": "maria.test@example.com",
-  "maid_phone": "971501234567",
+
+  "maid_address": "Villa 12, Al Barsha 2, Dubai, United Arab Emirates",
+  "maid_email": "maria.santos.fulltest@example.com",
+  "maid_phone": "971509998877",
+
   "maid_uae_resident": true,
-  "uae_residence_visa_number": "RV-TEST-001",
-  "uae_residence_visa_expiry": "01/01/2027",
+  "uae_residence_visa_number": "RV-2024-889900",
+  "uae_residence_visa_expiry": "01/12/2026",
+
+  "occupation": "Domestic Worker",
+  "employer_sponsor_address": "Maids CC Domestic Workers Services - Umm Suqeim Street, Al Barsha 2, Dubai",
+
+  "purpose_tourism": true,
+  "purpose_additional_info": "I will be accompanying my employer to continue my regular domestic duties and I will return with them after the trip.",
+
+  "destination_member_state_line": "Spain",
+  "first_entry_member_state": "Spain",
+
+  "number_of_entries": "single",
+  "entries_one": true,
+  "entries_two": false,
+  "entries_multiple": false,
+
   "arrival_date": "01/06/2026",
   "departure_date": "15/06/2026",
+
   "schengen_visa_before": false,
+
   "client_is_travel_companion": true,
-  "client_name": "Ahmed Test Client",
-  "client_hotel_address": "Hotel Example, Madrid",
-  "client_erp_address": "Villa 1, Al Barsha 2, Dubai, UAE",
-  "client_email": "client@example.ae",
-  "client_phone": "971509876543"
+  "client_name": "Ahmed Al Mansoori",
+  "client_hotel_address": "Hotel Example Gran Via, Calle Gran Via 45, Madrid, Spain",
+  "client_email": "ahmed.client.fulltest@example.ae",
+  "client_phone": "971501234567",
+
+  "companion_name": "Ahmed Al Mansoori",
+  "companion_hotel_address": "Hotel Example Gran Via, Calle Gran Via 45, Madrid, Spain",
+  "companion_email": "ahmed.client.fulltest@example.ae",
+  "companion_phone": "971501234567",
+
+  "all_expenses_covered_during_stay": true,
+  "costs_paid_by_sponsor_host": false,
+
+  "sponsor_client_name": "Ahmed Al Mansoori",
+  "sponsor_client_email": "ahmed.client.fulltest@example.ae",
+  "client_erp_address": "Villa 12, Al Barsha 2, Dubai, United Arab Emirates",
+  "sponsor_client_phone": "971501234567",
+
+  "place_and_date": "Dubai, 31 March 2026"
 }

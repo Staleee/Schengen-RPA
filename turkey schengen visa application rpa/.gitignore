@@ -8,4 +8,5 @@ venv/
 *.log
 output/
 debug_screenshots/
+request_logs/
 

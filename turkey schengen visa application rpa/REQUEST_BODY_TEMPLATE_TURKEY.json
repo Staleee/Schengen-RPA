@@ -1,12 +1,16 @@
 {
   "sex": "female",
   "marital_status": "single",
+  "maid_traveled_to_turkey_before": "no",
+  "maid_deported_from_turkey_before": "no",
   "arrival_date": "",
+  "departure_date": "",
+  "visa_duration": "",
+  "port": "",
   "client_email": "",
   "client_name": "",
   "client_phone_number": "",
   "date": "",
-  "departure_date": "",
   "hotel_address": "",
   "maid_address": "",
   "maid_date_of_birth": "",
@@ -25,6 +29,5 @@
   "passport_number": "",
   "passpot_number": "",
   "rvisa_expiry_date": "",
-  "rvisa_number": "",
-  "visa_duration": ""
+  "rvisa_number": ""
 }

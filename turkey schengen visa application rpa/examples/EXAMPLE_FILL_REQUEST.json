@@ -1,14 +1,18 @@
 {
   "sex": "female",
   "marital_status": "single",
-  "arrival_date": "15 April 2026",
-  "client_emai": "ahmed.example@email.com",
+  "maid_traveled_to_turkey_before": "no",
+  "maid_deported_from_turkey_before": "no",
+  "arrival_date": "01/04/2026",
+  "departure_date": "15/04/2026",
+  "visa_duration": "15 days",
+  "port": "Istanbul",
+  "client_email": "ahmed.example@email.com",
   "client_name": "Ahmed Al Mansoori",
   "client_phone_number": "+971501234567",
   "date": "31 March 2026",
-  "departure_date": "10 April 2026",
   "hotel_address": "Hotel Example, Istanbul, Turkey",
-  "maid_address": "Villa 12, Al Barsha, Dubai, UAE",
+  "maid_address": "Villa 12, Al Barsha 2, Dubai, United Arab Emirates — very long line to demonstrate word wrap in narrow cells",
   "maid_date_of_birth": "15 May 1990",
   "maid_email": "maria.santos@example.com",
   "maid_first_name": "Maria",
@@ -25,6 +29,5 @@
   "passport_number": "P1234567A",
   "passpot_number": "P1234567A",
   "rvisa_expiry_date": "01 December 2026",
-  "rvisa_number": "RV-2024-889900",
-  "visa_duration": "14 days"
+  "rvisa_number": "RV-2024-889900"
 }

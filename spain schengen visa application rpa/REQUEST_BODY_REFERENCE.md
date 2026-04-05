@@ -20,6 +20,17 @@ The API accepts **any extra JSON keys** (`model_config.extra = "allow"`) so Zoho
 | `use_business_merge` | Default `true`: apply defaults + client/companion routing. Set `false` for raw `pdf_fields` only. |
 | `pdf_fields` | Exact AcroForm name → value; applied last (overrides). |
 
+### Inspecting what Zoho (or any client) sent
+
+Set on the server (e.g. Railway variables):
+
+| Variable | Effect |
+|----------|--------|
+| `SPAIN_LOG_REQUEST_BODY=1` | Logs one line per request: `spain_fill_pdf_request_body` + full JSON on **stdout** (view in platform logs). Contains PII — use only in trusted environments. |
+| `SPAIN_SAVE_REQUEST_BODY_DIR=/path/to/dir` | Also writes a timestamped `.json` file per request (pretty-printed). Use a persistent volume if you need files to survive restarts. |
+
+Both can be enabled together. The logged object is the **full** parsed body (including `pdf_fields` and `use_business_merge`).
+
 ## 2. Common payload keys (after merge)
 
 | Area | Example keys |

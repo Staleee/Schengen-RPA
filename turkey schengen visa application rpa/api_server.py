@@ -3,9 +3,16 @@ Turkey Schengen RPA – Word (.docx) template fill (primary) and optional coordi
 
 Default port: 8092 (set env PORT to override).
 Word template: assets/*.docx or TURKEY_WORD_TEMPLATE path. Save as .docx (not .doc).
+
+Debug payloads: TURKEY_LOG_REQUEST_BODY=1 (stdout), TURKEY_SAVE_REQUEST_BODY_DIR=/path (JSON files).
 """
 
+import json
+import logging
 import os
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException
@@ -14,11 +21,42 @@ import uvicorn
 from pydantic import BaseModel, ConfigDict, Field
 
 from turkey_docx_fill import (
+    convert_docx_bytes_to_pdf,
     fill_turkey_docx_bytes,
     list_single_brace_placeholders,
     resolve_word_template,
 )
 from turkey_pdf_fill import DEFAULT_MAPPING_PATH, DEFAULT_TEMPLATE, fill_turkey_pdf
+
+logger = logging.getLogger(__name__)
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "log", "on")
+
+
+def _record_incoming_request(route: str, payload: Dict[str, Any]) -> None:
+    if not _truthy_env("TURKEY_LOG_REQUEST_BODY") and not os.environ.get("TURKEY_SAVE_REQUEST_BODY_DIR", "").strip():
+        return
+    envelope = {"route": route, "body": payload}
+    try:
+        compact = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"), default=str)
+    except TypeError:
+        compact = str(envelope)
+    if _truthy_env("TURKEY_LOG_REQUEST_BODY"):
+        logger.info("turkey_request %s", compact)
+    save_dir = os.environ.get("TURKEY_SAVE_REQUEST_BODY_DIR", "").strip()
+    if save_dir:
+        try:
+            p = Path(save_dir)
+            p.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            safe = route.strip("/").replace("/", "_") or "request"
+            fn = p / f"{safe}_{stamp}_{uuid.uuid4().hex[:8]}.json"
+            fn.write_text(json.dumps(envelope, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+        except OSError as e:
+            logger.warning("TURKEY_SAVE_REQUEST_BODY_DIR write failed: %s", e)
+
 
 app = FastAPI(
     title="Turkey Schengen Fill",
@@ -50,9 +88,11 @@ async def root():
         "word_template": str(word),
         "word_template_exists": word.is_file(),
         "fill_docx": "POST /fill-docx — body: sex, marital_status, plus any {placeholder} keys",
+        "fill_docx_pdf": "POST /fill-docx-pdf — same body; returns PDF if LibreOffice (soffice) is available",
         "pdf_template": str(DEFAULT_TEMPLATE.name),
         "pdf_mapping": str(DEFAULT_MAPPING_PATH.name),
         "fill_pdf": "POST /fill-pdf — requires assets PDF + mapping.json",
+        "debug_request_logging": "TURKEY_LOG_REQUEST_BODY=1, TURKEY_SAVE_REQUEST_BODY_DIR=/path",
     }
 
 
@@ -97,6 +137,7 @@ async def fill_docx(body: FillPdfRequest):
             detail=f"Word template missing: {path}. Save your form as .docx in assets/ or set TURKEY_WORD_TEMPLATE.",
         )
     payload = _merge_fill_body(body)
+    _record_incoming_request("fill-docx", body.model_dump(exclude_none=True))
     try:
         docx_bytes = fill_turkey_docx_bytes(path, payload)
     except FileNotFoundError as e:
@@ -110,6 +151,39 @@ async def fill_docx(body: FillPdfRequest):
     )
 
 
+@app.post("/fill-docx-pdf")
+async def fill_docx_pdf(body: FillPdfRequest):
+    """Same as /fill-docx but convert to PDF using LibreOffice headless (install on server)."""
+    path = resolve_word_template()
+    if not path.is_file():
+        raise HTTPException(
+            status_code=500,
+            detail=f"Word template missing: {path}. Save your form as .docx in assets/ or set TURKEY_WORD_TEMPLATE.",
+        )
+    payload = _merge_fill_body(body)
+    _record_incoming_request("fill-docx-pdf", body.model_dump(exclude_none=True))
+    try:
+        docx_bytes = fill_turkey_docx_bytes(path, payload)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Word fill failed: {e}") from e
+    pdf_bytes = convert_docx_bytes_to_pdf(docx_bytes)
+    if not pdf_bytes or not pdf_bytes.startswith(b"%PDF"):
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "PDF conversion unavailable. On Windows: install Microsoft Word and pip install pywin32. "
+                "Elsewhere: install LibreOffice (soffice). Or use POST /fill-docx for .docx only."
+            ),
+        )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="turkey_schengen_filled.pdf"'},
+    )
+
+
 @app.post("/fill-pdf")
 async def fill_pdf(body: FillPdfRequest):
     if not DEFAULT_TEMPLATE.exists():
@@ -118,6 +192,7 @@ async def fill_pdf(body: FillPdfRequest):
         raise HTTPException(status_code=500, detail="Mapping missing: mapping.json (create it after overlay mapping)")
 
     payload = _merge_fill_body(body)
+    _record_incoming_request("fill-pdf", body.model_dump(exclude_none=True))
 
     pdf_bytes = fill_turkey_pdf(payload)
     if not pdf_bytes.startswith(b"%PDF"):

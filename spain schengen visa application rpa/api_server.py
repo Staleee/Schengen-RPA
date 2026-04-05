@@ -5,9 +5,18 @@ The form is a fillable PDF (AcroForm). Request body: see FIELDS_TO_FILL.md and R
 
 Port: default 8090. If you see "address already in use", stop the other process or set env PORT, e.g.:
   $env:PORT=8091; .\.venv\Scripts\python api_server.py
+
+Debug Zoho / integration payloads (optional):
+  SPAIN_LOG_REQUEST_BODY=1          → one JSON line per POST /fill-pdf on stdout (Railway / Docker logs)
+  SPAIN_SAVE_REQUEST_BODY_DIR=path  → also write pretty JSON files under that directory (local or mounted volume)
 """
 
+import json
+import logging
 import os
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -16,6 +25,38 @@ import uvicorn
 from pydantic import BaseModel, ConfigDict, Field
 
 from pdf_fill import DEFAULT_TEMPLATE, fill_spain_schengen_pdf
+
+logger = logging.getLogger(__name__)
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "log", "on")
+
+
+def _record_incoming_fill_pdf_request(payload: Dict[str, Any]) -> None:
+    """Log and/or persist the raw POST body when env flags are set (PII — use only in trusted environments)."""
+    if not _truthy_env("SPAIN_LOG_REQUEST_BODY") and not os.environ.get("SPAIN_SAVE_REQUEST_BODY_DIR", "").strip():
+        return
+    try:
+        compact = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+    except TypeError:
+        compact = str(payload)
+    if _truthy_env("SPAIN_LOG_REQUEST_BODY"):
+        logger.info("spain_fill_pdf_request_body %s", compact)
+    save_dir = os.environ.get("SPAIN_SAVE_REQUEST_BODY_DIR", "").strip()
+    if save_dir:
+        try:
+            p = Path(save_dir)
+            p.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            fn = p / f"fill_pdf_{stamp}_{uuid.uuid4().hex[:8]}.json"
+            fn.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as e:
+            logger.warning("SPAIN_SAVE_REQUEST_BODY_DIR write failed: %s", e)
+
 
 app = FastAPI(
     title="Spain Schengen PDF Fill (UAE BLS)",
@@ -86,6 +127,9 @@ async def fill_pdf(body: FillPdfRequest):
             status_code=500,
             detail="Template PDF missing. Add assets/schengen_visa_application_form_english.pdf",
         )
+
+    full_payload = body.model_dump(exclude_none=True)
+    _record_incoming_fill_pdf_request(full_payload)
 
     structured = _request_to_dict(body)
     try:
