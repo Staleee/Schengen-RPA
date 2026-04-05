@@ -5,7 +5,7 @@
   "maid_deported_from_turkey_before": "no",
   "arrival_date": "01/04/2026",
   "departure_date": "15/04/2026",
-  "visa_duration": "15 days",
+  "means_of_transport": "Air",
   "port": "Istanbul",
   "client_email": "ahmed.example@email.com",
   "client_name": "Ahmed Al Mansoori",

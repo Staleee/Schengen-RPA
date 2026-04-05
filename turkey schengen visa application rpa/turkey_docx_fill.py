@@ -18,7 +18,11 @@ JSON (preferred): `maid_traveled_to_turkey_before`, `maid_deported_from_turkey_b
 
 **Client email typo in Word:** `{client)email}` maps to the same value as `client_email`.
 
-**Visa duration:** If `arrival_date` and `departure_date` parse, `visa_duration` is set to inclusive day count unless you send a non-empty `visa_duration`. Dates: **`dd.MM.yyyy` (Zoho)** tried first, then `dd/mm/yyyy`, `yyyy-mm-dd`, etc.
+**Visa duration:** When `arrival_date` and `departure_date` parse, **`visa_duration` is always set from them** (inclusive day count) and **overrides** any value sent in the JSON.
+
+**Means of transport:** Send `means_of_transport` (e.g. `Air`) for `{means_of_transport}` in Word.
+
+**Checkboxes:** Optional env **`TURKEY_CHECKBOX_FONT_PT`** (default **14**) enlarges mark-only runs. ASCII mode uses **`[X]` / `[ ]`** for PDF readability.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from docx import Document
+from docx.shared import Pt
 
 _INVALID_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff]")
 _SINGLE_BRACE_RE = re.compile(r"\{([^{}]+)\}")
@@ -91,12 +96,38 @@ def _normalize_marital(raw: str) -> str:
 
 def _checkbox_marks() -> Tuple[str, str]:
     """
-    Checked / unchecked mark for Word. Unicode works in Word; LibreOffice PDF conversion
-    often shrinks or garbles U+2610/U+2611 — set TURKEY_CHECKBOX_ASCII=1 for X / o.
+    Checked / unchecked mark for Word. LibreOffice PDF often shrinks single glyphs — use
+    TURKEY_CHECKBOX_ASCII=1 for bracket style [X] / [ ] (default on Railway Dockerfile).
     """
     if os.environ.get("TURKEY_CHECKBOX_ASCII", "").strip().lower() in ("1", "true", "yes", "on"):
-        return "X", "-"
+        return "[X]", "[ ]"
     return "☑", "☐"
+
+
+def _checkbox_font_pt() -> Optional[int]:
+    try:
+        v = int(os.environ.get("TURKEY_CHECKBOX_FONT_PT", "14"))
+        if v <= 0:
+            return None
+        return max(9, min(36, v))
+    except ValueError:
+        return 14
+
+
+def _checkbox_run_styling_tokens(chk: str, uchk: str) -> frozenset:
+    """Runs that are exactly these strings get larger font (checkbox / history ticks)."""
+    return frozenset(
+        {
+            chk,
+            uchk,
+            "☑",
+            "☐",
+            "X",
+            "-",
+            "[X]",
+            "[ ]",
+        }
+    )
 
 
 def checkbox_placeholders(sex: Any, marital_status: Any) -> Dict[str, str]:
@@ -301,15 +332,14 @@ def build_replacements(flat: Dict[str, Any]) -> Dict[str, str]:
         sval = _sanitize_for_word(str(v))
         values[nk] = sval
 
-    if days is not None:
-        existing = str(flat.get("visa_duration") or "").strip()
-        if not existing:
-            values["visa_duration"] = "1 day" if days == 1 else f"{days} days"
-
     for ck, cv in cb.items():
         values[ck] = cv
     for hk, hv in hist.items():
         values[hk] = hv
+
+    # Always override body when dates yield a valid inclusive stay (Zoho often sends stale text).
+    if days is not None:
+        values["visa_duration"] = "1 day" if days == 1 else f"{days} days"
 
     # Word typo `{client)email}` → normalize_key gives `clientemail`, not `client_email`
     if "client_email" in values:
@@ -330,7 +360,12 @@ def flatten_payload(body: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
+def _process_paragraph(
+    paragraph,
+    values: Dict[str, str],
+    checkbox_tokens: frozenset,
+    checkbox_pt: Optional[int],
+) -> None:
     full_text = "".join(run.text for run in paragraph.runs)
     if "{" not in full_text:
         return
@@ -357,17 +392,25 @@ def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
             continue
         r = paragraph.add_run(text)
         r.bold = is_bold
+        if checkbox_pt and text in checkbox_tokens:
+            r.font.size = Pt(checkbox_pt)
 
 
-def _process_block(paragraphs, tables, values: Dict[str, str]) -> None:
+def _process_block(
+    paragraphs,
+    tables,
+    values: Dict[str, str],
+    checkbox_tokens: frozenset,
+    checkbox_pt: Optional[int],
+) -> None:
     for p in paragraphs:
-        _process_paragraph(p, values)
+        _process_paragraph(p, values, checkbox_tokens, checkbox_pt)
     if tables:
         for table in tables:
             for row in table.rows:
                 for cell in row.cells:
                     for p in cell.paragraphs:
-                        _process_paragraph(p, values)
+                        _process_paragraph(p, values, checkbox_tokens, checkbox_pt)
 
 
 def fill_turkey_docx_bytes(template_path: Path, flat: Dict[str, Any]) -> bytes:
@@ -375,9 +418,12 @@ def fill_turkey_docx_bytes(template_path: Path, flat: Dict[str, Any]) -> bytes:
         raise FileNotFoundError(f"Word template not found: {template_path}")
 
     values = build_replacements(flat)
+    chk, uchk = _checkbox_marks()
+    cb_tokens = _checkbox_run_styling_tokens(chk, uchk)
+    cb_pt = _checkbox_font_pt()
     doc = Document(str(template_path))
 
-    _process_block(doc.paragraphs, doc.tables, values)
+    _process_block(doc.paragraphs, doc.tables, values, cb_tokens, cb_pt)
     for section in doc.sections:
         for block in (
             section.header,
@@ -388,7 +434,13 @@ def fill_turkey_docx_bytes(template_path: Path, flat: Dict[str, Any]) -> bytes:
             getattr(section, "even_page_footer", None),
         ):
             if block is not None:
-                _process_block(block.paragraphs, getattr(block, "tables", []) or [], values)
+                _process_block(
+                    block.paragraphs,
+                    getattr(block, "tables", []) or [],
+                    values,
+                    cb_tokens,
+                    cb_pt,
+                )
 
     buf = BytesIO()
     doc.save(buf)
