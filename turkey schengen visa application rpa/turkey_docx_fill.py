@@ -22,7 +22,12 @@ JSON (preferred): `maid_traveled_to_turkey_before`, `maid_deported_from_turkey_b
 
 **Means of transport:** Send `means_of_transport` (e.g. `Air`) for `{means_of_transport}` in Word.
 
-**Checkboxes:** API-filled boxes use the same **Word symbol runs** as the template (`<w:sym>`), not Unicode in `<w:t>` (Unicode boxes often render as thin slivers in Word/PDF). Defaults match `visaform.docx`: **Webdings** `F063` = empty, `F072` = checked. Override with **TURKEY_CHECKBOX_SYM_FONT**, **TURKEY_CHECKBOX_SYM_EMPTY**, **TURKEY_CHECKBOX_SYM_CHECKED** (hex like `F063`).
+**Static checkboxes (passport type, etc.):** Put a placeholder in Word for each box — no JSON field required:
+  `{cbe}` — **e**mpty box; `{cbc}` — **c**hecked box (Webdings `w:sym`). Same: `{checkbox_empty}` / `{checkbox_checked}`, `{cb_empty}` / `{cb_checked}`. Add a space before the label if needed (`{cbe} Ordinary passport`).
+
+**Dynamic checkboxes (JSON-driven, unchanged):** `{6m}` `{6f}`; `{8s}` `{8m}` or `{8a}`…`{8f}`; `{sex_check_male}` `{sex_check_female}`; `{marital_check_single}` … `{marital_check_other}`; `{24y}` `{24n}` `{25y}` `{25n}` — still filled from `sex`, `marital_status`, Turkey history fields.
+
+Symbol font defaults: **Webdings** `F063` = empty, `F072` = checked. Override with **TURKEY_CHECKBOX_SYM_FONT**, **TURKEY_CHECKBOX_SYM_EMPTY**, **TURKEY_CHECKBOX_SYM_CHECKED**.
 """
 
 from __future__ import annotations
@@ -122,6 +127,19 @@ def _sym_unchecked_checked() -> Tuple[SymGlyph, SymGlyph]:
     if len(checked_h) == 2 and all(c in "0123456789ABCDEF" for c in checked_h):
         checked_h = "F0" + checked_h
     return SymGlyph(font, empty_h), SymGlyph(font, checked_h)
+
+
+def _reserved_checkbox_glyph_placeholders() -> Dict[str, SymGlyph]:
+    """Always available in Word: static empty/checked box (not driven by JSON)."""
+    uchk, chk = _sym_unchecked_checked()
+    return {
+        "cbe": uchk,
+        "cbc": chk,
+        "checkbox_empty": uchk,
+        "checkbox_checked": chk,
+        "cb_empty": uchk,
+        "cb_checked": chk,
+    }
 
 
 def _font_name_for_run_text(text: str, base_font: Optional[str]) -> Optional[str]:
@@ -398,6 +416,10 @@ def build_replacements(flat: Dict[str, Any]) -> Dict[str, Any]:
     if "client_email" in values:
         values["clientemail"] = values["client_email"]
 
+    # Static rows: `{checkbox_empty}` / `{checkbox_checked}` (and `cb_*`) — always glyphs; override JSON
+    for rk, rv in _reserved_checkbox_glyph_placeholders().items():
+        values[rk] = rv
+
     return values
 
 
@@ -472,7 +494,8 @@ def _process_paragraph(paragraph, values: Dict[str, Any]) -> None:
         run._r.getparent().remove(run._r)
     for segment, is_bold in segments:
         if isinstance(segment, SymGlyph):
-            _append_sym_run(paragraph, segment, half_pt, is_bold)
+            # Never bold symbol runs — avoids smushed / inconsistent box layout next to labels
+            _append_sym_run(paragraph, segment, half_pt, False)
             continue
         text = segment
         if not text:
