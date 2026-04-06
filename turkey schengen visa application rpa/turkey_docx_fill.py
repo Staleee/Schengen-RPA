@@ -22,12 +22,13 @@ JSON (preferred): `maid_traveled_to_turkey_before`, `maid_deported_from_turkey_b
 
 **Means of transport:** Send `means_of_transport` (e.g. `Air`) for `{means_of_transport}` in Word.
 
-**Checkboxes:** Filled placeholders use Unicode **☑** / **☐** only (same size as surrounding text; no ASCII or font hacks).
+**Checkboxes:** Filled placeholders use Unicode **☑** / **☐**. Runs that contain those glyphs use **Segoe UI Symbol** (Windows) or **DejaVu Sans** (Linux/PDF) so they do not collapse into thin slivers; override with **TURKEY_CHECKBOX_FONT**.
 """
 
 from __future__ import annotations
 
 import os
+import sys
 import re
 import shutil
 import subprocess
@@ -99,6 +100,23 @@ def _normalize_marital(raw: str) -> str:
 
 _CHECK_ON = "☑"
 _CHECK_OFF = "☐"
+_CHECK_GLYPHS = frozenset((_CHECK_ON, _CHECK_OFF))
+
+
+def _default_checkbox_symbol_font() -> str:
+    """Font that draws U+2610/U+2611 at correct advance width (body fonts often render them as slivers)."""
+    env = os.environ.get("TURKEY_CHECKBOX_FONT", "").strip()
+    if env:
+        return env
+    if sys.platform == "win32":
+        return "Segoe UI Symbol"
+    return "DejaVu Sans"
+
+
+def _font_name_for_run_text(text: str, base_font: Optional[str]) -> Optional[str]:
+    if text and any(c in _CHECK_GLYPHS for c in text):
+        return _default_checkbox_symbol_font()
+    return base_font
 
 
 def checkbox_placeholders(sex: Any, marital_status: Any) -> Dict[str, str]:
@@ -418,8 +436,9 @@ def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
         r.bold = is_bold
         if base_size is not None:
             r.font.size = base_size
-        if base_font:
-            r.font.name = base_font
+        run_font = _font_name_for_run_text(text, base_font)
+        if run_font:
+            r.font.name = run_font
 
 
 def _process_table(table, values: Dict[str, str]) -> None:
