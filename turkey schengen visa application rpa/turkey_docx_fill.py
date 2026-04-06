@@ -22,13 +22,12 @@ JSON (preferred): `maid_traveled_to_turkey_before`, `maid_deported_from_turkey_b
 
 **Means of transport:** Send `means_of_transport` (e.g. `Air`) for `{means_of_transport}` in Word.
 
-**Checkboxes:** Filled placeholders use Unicode **☑** / **☐**. Runs that contain those glyphs use **Segoe UI Symbol** (Windows) or **DejaVu Sans** (Linux/PDF) so they do not collapse into thin slivers; override with **TURKEY_CHECKBOX_FONT**.
+**Checkboxes:** API-filled boxes use the same **Word symbol runs** as the template (`<w:sym>`), not Unicode in `<w:t>` (Unicode boxes often render as thin slivers in Word/PDF). Defaults match `visaform.docx`: **Webdings** `F063` = empty, `F072` = checked. Override with **TURKEY_CHECKBOX_SYM_FONT**, **TURKEY_CHECKBOX_SYM_EMPTY**, **TURKEY_CHECKBOX_SYM_CHECKED** (hex like `F063`).
 """
 
 from __future__ import annotations
 
 import os
-import sys
 import re
 import shutil
 import subprocess
@@ -36,9 +35,11 @@ import tempfile
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
 
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Pt
 
 _INVALID_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff]")
@@ -98,30 +99,69 @@ def _normalize_marital(raw: str) -> str:
     return aliases.get(s, s)
 
 
-_CHECK_ON = "☑"
-_CHECK_OFF = "☐"
-_CHECK_GLYPHS = frozenset((_CHECK_ON, _CHECK_OFF))
+# Unicode ballot (only for stray text in template / legacy); prefer w:sym via SymGlyph for fills.
+_CHECK_ON_U = "☑"
+_CHECK_OFF_U = "☐"
+_CHECK_GLYPHS = frozenset((_CHECK_ON_U, _CHECK_OFF_U))
 
 
-def _default_checkbox_symbol_font() -> str:
-    """Font that draws U+2610/U+2611 at correct advance width (body fonts often render them as slivers)."""
-    env = os.environ.get("TURKEY_CHECKBOX_FONT", "").strip()
-    if env:
-        return env
-    if sys.platform == "win32":
-        return "Segoe UI Symbol"
-    return "DejaVu Sans"
+class SymGlyph(NamedTuple):
+    """Word `<w:sym w:font=… w:char=…/>` (same as unchecked boxes in visaform.docx)."""
+
+    font: str
+    char_hex: str
+
+
+def _sym_unchecked_checked() -> Tuple[SymGlyph, SymGlyph]:
+    """Return (empty_box, checked_box); defaults from visaform.docx (Webdings F063 / F072)."""
+    font = (os.environ.get("TURKEY_CHECKBOX_SYM_FONT") or "Webdings").strip()
+    empty_h = (os.environ.get("TURKEY_CHECKBOX_SYM_EMPTY") or "F063").strip().upper()
+    checked_h = (os.environ.get("TURKEY_CHECKBOX_SYM_CHECKED") or "F072").strip().upper()
+    if len(empty_h) == 2 and all(c in "0123456789ABCDEF" for c in empty_h):
+        empty_h = "F0" + empty_h
+    if len(checked_h) == 2 and all(c in "0123456789ABCDEF" for c in checked_h):
+        checked_h = "F0" + checked_h
+    return SymGlyph(font, empty_h), SymGlyph(font, checked_h)
 
 
 def _font_name_for_run_text(text: str, base_font: Optional[str]) -> Optional[str]:
+    """If template still has Unicode ballot chars in `<w:t>`, bias toward a symbol font."""
     if text and any(c in _CHECK_GLYPHS for c in text):
-        return _default_checkbox_symbol_font()
+        return (os.environ.get("TURKEY_CHECKBOX_FONT") or "").strip() or (
+            "Segoe UI Symbol" if os.name == "nt" else "DejaVu Sans"
+        )
     return base_font
 
 
-def checkbox_placeholders(sex: Any, marital_status: Any) -> Dict[str, str]:
-    """Checked / unchecked tokens for Word next to each option (sections 6 and 8)."""
-    chk, uchk = _CHECK_ON, _CHECK_OFF
+def _append_sym_run(
+    paragraph,
+    sym: SymGlyph,
+    font_size_half_pt: Optional[int],
+    bold: bool,
+) -> None:
+    """Append `<w:r><w:rPr/>?<w:sym w:font=… w:char=…/></w:r>` (same mechanism as the template)."""
+    r = OxmlElement("w:r")
+    rPr = OxmlElement("w:rPr")
+    r.append(rPr)
+    if bold:
+        rPr.append(OxmlElement("w:b"))
+    if font_size_half_pt is not None:
+        sz = OxmlElement("w:sz")
+        sz.set(qn("w:val"), str(font_size_half_pt))
+        rPr.append(sz)
+        sz_cs = OxmlElement("w:szCs")
+        sz_cs.set(qn("w:val"), str(font_size_half_pt))
+        rPr.append(sz_cs)
+    sym_el = OxmlElement("w:sym")
+    sym_el.set(qn("w:font"), sym.font)
+    sym_el.set(qn("w:char"), sym.char_hex)
+    r.append(sym_el)
+    paragraph._p.append(r)
+
+
+def checkbox_placeholders(sex: Any, marital_status: Any) -> Dict[str, SymGlyph]:
+    """Checked / unchecked symbol runs for Word next to each option (sections 6 and 8)."""
+    uchk, chk = _sym_unchecked_checked()
     s = str(sex or "").strip().lower()
     if s in ("m", "male", "man", "1"):
         male, female = chk, uchk
@@ -166,9 +206,9 @@ def _truthy_tristate(v: Any) -> Optional[bool]:
     return None
 
 
-def turkey_history_checkboxes(flat: Dict[str, Any]) -> Dict[str, str]:
+def turkey_history_checkboxes(flat: Dict[str, Any]) -> Dict[str, SymGlyph]:
     """§24 visited Turkey before → {24y}/{24n}; §25 deported/refused → {25y}/{25n}."""
-    chk, uchk = _CHECK_ON, _CHECK_OFF
+    uchk, chk = _sym_unchecked_checked()
     visited = _truthy_tristate(
         flat.get("maid_traveled_to_turkey_before")
         or flat.get("traveled_turkey_before")
@@ -332,12 +372,12 @@ def compute_inclusive_stay_days(flat: Dict[str, Any]) -> Optional[int]:
     return days
 
 
-def build_replacements(flat: Dict[str, Any]) -> Dict[str, str]:
+def build_replacements(flat: Dict[str, Any]) -> Dict[str, Any]:
     cb = checkbox_placeholders(flat.get("sex"), flat.get("marital_status"))
     hist = turkey_history_checkboxes(flat)
     days = compute_inclusive_stay_days(flat)
 
-    values: Dict[str, str] = {}
+    values: Dict[str, Any] = {}
     for k, v in flat.items():
         nk = normalize_key(str(k)) if k is not None else ""
         if not nk:
@@ -405,20 +445,21 @@ def _paragraph_base_run_font(paragraph):
     return best_size, best_font
 
 
-def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
+def _process_paragraph(paragraph, values: Dict[str, Any]) -> None:
     full_text = "".join(run.text for run in paragraph.runs)
     if "{" not in full_text:
         return
 
     base_size, base_font = _paragraph_base_run_font(paragraph)
+    half_pt = int(round(base_size.pt * 2)) if base_size is not None else None
 
-    def repl(m: re.Match) -> str:
+    def repl(m: re.Match) -> Union[str, SymGlyph]:
         key = normalize_key(m.group(1).strip())
         if key in values:
             return values[key]
         return m.group(0)
 
-    segments: List[Tuple[str, bool]] = []
+    segments: List[Tuple[Union[str, SymGlyph], bool]] = []
     pos = 0
     for m in _SINGLE_BRACE_RE.finditer(full_text):
         segments.append((full_text[pos : m.start()], False))
@@ -429,7 +470,11 @@ def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
 
     for run in list(paragraph.runs):
         run._r.getparent().remove(run._r)
-    for text, is_bold in segments:
+    for segment, is_bold in segments:
+        if isinstance(segment, SymGlyph):
+            _append_sym_run(paragraph, segment, half_pt, is_bold)
+            continue
+        text = segment
         if not text:
             continue
         r = paragraph.add_run(text)
@@ -441,7 +486,7 @@ def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
             r.font.name = run_font
 
 
-def _process_table(table, values: Dict[str, str]) -> None:
+def _process_table(table, values: Dict[str, Any]) -> None:
     """Walk a table and any nested tables (Word tables inside cells are not in doc.tables)."""
     for row in table.rows:
         for cell in row.cells:
@@ -451,7 +496,7 @@ def _process_table(table, values: Dict[str, str]) -> None:
                 _process_table(nested, values)
 
 
-def _process_block(paragraphs, tables, values: Dict[str, str]) -> None:
+def _process_block(paragraphs, tables, values: Dict[str, Any]) -> None:
     for p in paragraphs:
         _process_paragraph(p, values)
     for table in tables or []:
