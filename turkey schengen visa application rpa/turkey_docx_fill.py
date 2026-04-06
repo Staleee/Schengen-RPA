@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from docx import Document
+from docx.shared import Pt
 
 _INVALID_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff]")
 _SINGLE_BRACE_RE = re.compile(r"\{([^{}]+)\}")
@@ -49,7 +50,10 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 def normalize_key(text: str) -> str:
     if not text or not isinstance(text, str):
         return ""
-    t = text.strip().lower()
+    t = text.strip()
+    t = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", t)
+    t = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", t)
+    t = t.lower()
     t = re.sub(r"\s+", "_", t)
     t = re.sub(r"[^\w\-]", "", t)
     return t
@@ -217,6 +221,14 @@ def _parse_flexible_date(val: Any) -> Optional[date]:
         except ValueError:
             pass
     s = _normalize_date_string(s)
+    # Zoho year/month/day: 2026/4/15 or 2026-04-15 (avoid misreading as dd/mm)
+    m = re.fullmatch(r"(\d{4})[/.](\d{1,2})[/.](\d{1,2})", s)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            return date(y, mo, d)
+        except ValueError:
+            pass
     for fmt in _DATE_FORMATS:
         try:
             return datetime.strptime(s, fmt).date()
@@ -225,30 +237,36 @@ def _parse_flexible_date(val: Any) -> Optional[date]:
     return None
 
 
-# Only unambiguous travel keys — NOT start_date/end_date/stay_from (Zoho often maps those
-# to unrelated ranges and blows up day counts into thousands).
+# Start of stay in destination: NOT start_date (Zoho noise). See compute_inclusive_stay_days.
 _VISA_ARRIVAL_KEYS_ORDER: Tuple[str, ...] = (
     "arrival_date",
     "arrivaldate",
     "date_of_arrival",
     "travel_arrival_date",
 )
-_VISA_DEPARTURE_KEYS_ORDER: Tuple[str, ...] = (
+# End of stay when arrival_* is already set (leave Schengen / Turkey or return flight).
+_VISA_END_AFTER_ARRIVAL_ORDER: Tuple[str, ...] = (
     "departure_date",
     "departuredate",
     "date_of_departure",
     "travel_departure_date",
+    "return_date",
+    "returndate",
+    "date_of_return",
 )
 
 
-def _visa_date_from_flat(flat: Dict[str, Any], ordered_normalized_keys: Tuple[str, ...]) -> Optional[date]:
-    """First non-empty value wins, in stable priority order (not dict iteration order)."""
-    by_nk: Dict[str, Any] = {}
+def _flat_first_by_normalized_key(flat: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
     for k, v in flat.items():
         nk = normalize_key(str(k))
-        if nk and nk not in by_nk:
-            by_nk[nk] = v
-    for nk in ordered_normalized_keys:
+        if nk and nk not in out:
+            out[nk] = v
+    return out
+
+
+def _first_parsed_date(by_nk: Dict[str, Any], keys: Tuple[str, ...]) -> Optional[date]:
+    for nk in keys:
         if nk in by_nk:
             d = _parse_flexible_date(by_nk[nk])
             if d is not None:
@@ -266,15 +284,25 @@ def _max_visa_stay_days_sane() -> int:
 
 def compute_inclusive_stay_days(flat: Dict[str, Any]) -> Optional[int]:
     """
-    Calendar days from arrival through departure, **inclusive** (both endpoints count).
+    Inclusive calendar days for the trip.
 
-    Example: arrival 01/04/2026, departure 15/04/2026 -> 15 days
-    (present on 1 Apr and 15 Apr, plus 13 days in between = 15).
+    1) **Form-style:** `arrival_date` (enter) + `departure_date` or `return_date` (leave / fly back).
+    2) **Zoho / sponsor-style (no arrival):** `departure_date` = trip start, `return_date` = trip end.
 
-    Returns None if dates missing, unparseable, departure before arrival, or span over sanity cap.
+    Returns None if dates missing, unparseable, end before start, or span over sanity cap.
     """
-    arr = _visa_date_from_flat(flat, _VISA_ARRIVAL_KEYS_ORDER)
-    dep = _visa_date_from_flat(flat, _VISA_DEPARTURE_KEYS_ORDER)
+    by_nk = _flat_first_by_normalized_key(flat)
+    arr = _first_parsed_date(by_nk, _VISA_ARRIVAL_KEYS_ORDER)
+    dep: Optional[date] = None
+
+    if arr is None:
+        d_go = _first_parsed_date(by_nk, ("departure_date", "departuredate"))
+        d_back = _first_parsed_date(by_nk, ("return_date", "returndate", "date_of_return"))
+        if d_go and d_back and d_back >= d_go:
+            arr, dep = d_go, d_back
+    else:
+        dep = _first_parsed_date(by_nk, _VISA_END_AFTER_ARRIVAL_ORDER)
+
     if arr is None or dep is None:
         return None
     if dep < arr:
@@ -327,10 +355,44 @@ def flatten_payload(body: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _paragraph_base_run_font(paragraph):
+    """
+    Font for rebuilt runs: prefer the **largest** explicit run size in the paragraph so static
+    symbols (e.g. ☐) stay visible when placeholders sit in smaller runs; fall back to style.
+    """
+    best_size = None
+    best_font = None
+    for run in paragraph.runs:
+        if run.font.size is not None:
+            if best_size is None or run.font.size.pt > best_size.pt:
+                best_size = run.font.size
+                if run.font.name:
+                    best_font = run.font.name
+        elif run.font.name and not best_font:
+            best_font = run.font.name
+    if best_size is None:
+        try:
+            sf = paragraph.style.font.size
+            if sf is not None:
+                best_size = sf
+        except (AttributeError, TypeError):
+            pass
+    if not best_font:
+        try:
+            fn = paragraph.style.font.name
+            if fn:
+                best_font = fn
+        except (AttributeError, TypeError):
+            pass
+    return best_size, best_font
+
+
 def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
     full_text = "".join(run.text for run in paragraph.runs)
     if "{" not in full_text:
         return
+
+    base_size, base_font = _paragraph_base_run_font(paragraph)
 
     def repl(m: re.Match) -> str:
         key = normalize_key(m.group(1).strip())
@@ -354,17 +416,27 @@ def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
             continue
         r = paragraph.add_run(text)
         r.bold = is_bold
+        if base_size is not None:
+            r.font.size = base_size
+        if base_font:
+            r.font.name = base_font
+
+
+def _process_table(table, values: Dict[str, str]) -> None:
+    """Walk a table and any nested tables (Word tables inside cells are not in doc.tables)."""
+    for row in table.rows:
+        for cell in row.cells:
+            for p in cell.paragraphs:
+                _process_paragraph(p, values)
+            for nested in cell.tables:
+                _process_table(nested, values)
 
 
 def _process_block(paragraphs, tables, values: Dict[str, str]) -> None:
     for p in paragraphs:
         _process_paragraph(p, values)
-    if tables:
-        for table in tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for p in cell.paragraphs:
-                        _process_paragraph(p, values)
+    for table in tables or []:
+        _process_table(table, values)
 
 
 def fill_turkey_docx_bytes(template_path: Path, flat: Dict[str, Any]) -> bytes:

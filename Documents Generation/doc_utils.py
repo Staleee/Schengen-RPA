@@ -64,10 +64,14 @@ DOCUMENT_VARIABLES = {
 
 
 def normalize_key(text: str) -> str:
-    """Normalize to snake_case: strip, lowercase, spaces -> underscores."""
+    """Normalize to snake_case: camelCase, strip, lowercase, spaces -> underscores."""
     if not text or not isinstance(text, str):
         return ""
-    t = text.strip().lower()
+    t = text.strip()
+    # camelCase / PascalCase -> snake_case (e.g. departureDate, Return_Date -> departure_date)
+    t = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", t)
+    t = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", t)
+    t = t.lower()
     t = re.sub(r"\s+", "_", t)
     t = re.sub(r"[^\w\-]", "", t)
     return t

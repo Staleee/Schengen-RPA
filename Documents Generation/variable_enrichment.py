@@ -4,7 +4,7 @@ Enrich template variables: trip duration from dates, salary number -> words.
 
 import re
 from datetime import date, datetime
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 try:
     from dateutil import parser as date_parser
@@ -63,7 +63,14 @@ def _parse_date(s: str) -> Optional[date]:
         except ValueError:
             pass
 
-    # 3) dateutil: yearfirst=True (NOT dayfirst) so 2026-6-3 stays June 3, not March 6
+    # 3) EU / Zoho dd.MM.yyyy before dateutil (avoids wrong guesses on dotted dates)
+    for fmt in ("%d.%m.%Y", "%d.%m.%y", "%d/%m/%Y", "%d/%m/%y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+
+    # 4) dateutil: yearfirst=True (NOT dayfirst) for remaining strings
     if date_parser:
         try:
             dt = date_parser.parse(s, yearfirst=True, dayfirst=False)
@@ -71,12 +78,6 @@ def _parse_date(s: str) -> Optional[date]:
         except (ValueError, TypeError, OverflowError):
             pass
 
-    # 4) Legacy human / EU formats from samples (day first)
-    for fmt in ("%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y"):
-        try:
-            return datetime.strptime(s, fmt).date()
-        except ValueError:
-            continue
     return None
 
 
@@ -123,9 +124,32 @@ def salary_numeric_to_words(value: str) -> Optional[str]:
     return " ".join(parts)
 
 
-def enrich_variables(document_type: str, variables: Dict[str, str]) -> Dict[str, str]:
+def _raw_body_first_string(raw: Dict[str, Any], *candidate_keys: str) -> str:
+    """Match Zoho keys by normalized name (camelCase, spaces) when not in document map."""
+    from doc_utils import normalize_key as nk_fn
+
+    by_nk: Dict[str, Any] = {}
+    for k, v in raw.items():
+        nk = nk_fn(str(k))
+        if nk and nk not in by_nk:
+            by_nk[nk] = v
+    for ck in candidate_keys:
+        nk = nk_fn(ck)
+        if nk in by_nk and by_nk[nk] is not None:
+            s = str(by_nk[nk]).strip()
+            if s:
+                return s
+    return ""
+
+
+def enrich_variables(
+    document_type: str,
+    variables: Dict[str, str],
+    raw_body: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
     """Return a copy with trip_duration and/or salary_in_letters filled when derivable."""
     out = dict(variables)
+    raw_body = raw_body or {}
 
     # Salary: numeric -> words (sponsor mapping uses salary_in_letters)
     sal_key = "salary_in_letters"
@@ -134,11 +158,14 @@ def enrich_variables(document_type: str, variables: Dict[str, str]) -> Dict[str,
         if converted is not None:
             out[sal_key] = converted
 
-    # Sponsor: trip_duration is always computed from departure + return when both parse
-    # (overrides any trip_duration sent by Zoho). Dates from Zoho: year/month/day — see _parse_zoho_year_month_day.
+    # Sponsor: trip_duration from departure_date + return_date; if departure empty, try raw arrival_date.
     if document_type == "sponsor":
-        dep = out.get("departure_date", "")
-        ret = out.get("return_date", "")
+        dep = (out.get("departure_date") or "").strip() or _raw_body_first_string(
+            raw_body, "arrival_date", "Arrival_Date", "trip_start_date"
+        )
+        ret = (out.get("return_date") or "").strip() or _raw_body_first_string(
+            raw_body, "return_date", "Return_Date", "trip_end_date"
+        )
         days = compute_trip_duration_days(dep, ret)
         if days is not None:
             out["trip_duration"] = f"{days} days"

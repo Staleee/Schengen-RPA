@@ -62,7 +62,9 @@ def _build_one_document(
     want_pdf=True: convert to PDF (LibreOffice). If conversion fails, returns .docx with X-Pdf-Unavailable.
     """
     path = TEMPLATES[document_type]
-    variables = enrich_variables(document_type, _variables_for_document(body, document_type))
+    variables = enrich_variables(
+        document_type, _variables_for_document(body, document_type), body
+    )
     out_docx = BASE_DIR / "output" / f"filled_{document_type}.docx"
     out_docx.parent.mkdir(parents=True, exist_ok=True)
     fill_document(path, variables, out_docx)
@@ -90,13 +92,21 @@ def _load_mapping() -> Dict[str, Dict[str, str]]:
 
 
 def _variables_for_document(body: Dict[str, Any], document_type: str) -> Dict[str, str]:
-    """Direct exchange: for each key in the mapping for this document, take value from body (or '')."""
+    """Map document keys to values; body lookup is normalized so Zoho camelCase/spaces still match."""
     mapping = _load_mapping()
     doc_map = mapping.get(document_type, {})
+    body_by_nk: Dict[str, Any] = {}
+    for k, v in body.items():
+        nk = normalize_key(str(k))
+        if nk and nk not in body_by_nk:
+            body_by_nk[nk] = v
     out = {}
     for request_key in doc_map.keys():
+        nk = normalize_key(request_key)
         val = body.get(request_key)
-        out[normalize_key(request_key)] = (str(val) if val is not None else "").strip()
+        if val is None and nk:
+            val = body_by_nk.get(nk)
+        out[nk] = (str(val) if val is not None else "").strip()
     return out
 
 
@@ -162,8 +172,9 @@ async def generate_one(
 ):
     """
     Generate one document. Default file is **PDF**; use ?output=docx for Word.
-    Sponsor: trip_duration always recomputed from departure_date + return_date when both parse
-    (overrides Zoho). Zoho dates: year/month/day (YYYY/MM/DD or YY/MM/DD). Inclusive day count.
+    Sponsor: trip_duration recomputed from departure_date + return_date when both parse (overrides Zoho).
+    If departure_date is empty in the mapped body, arrival_date (or trip_start_date) from the raw JSON is used as start.
+    Zoho dates: year/month/day (YYYY/MM/DD or YY/MM/DD). camelCase keys are normalized. Inclusive day count.
     salary_in_letters: plain numbers (e.g. 1500) become words only (AED in template).
     """
     dt = document_type or body.pop("document_type", None)
