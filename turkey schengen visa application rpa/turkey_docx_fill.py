@@ -22,6 +22,8 @@ JSON (preferred): `maid_traveled_to_turkey_before`, `maid_deported_from_turkey_b
 
 **Means of transport:** Send `means_of_transport` (e.g. `Air`) for `{means_of_transport}` in Word.
 
+**`{maid_country_of_birth}`:** Always **derived** from `maid_nationality` (and a few alternate keys), not taken from the request body for this field — e.g. Filipino → Philippines. Unknown demonyms yield an empty string.
+
 **Static checkboxes (passport type, etc.):** No JSON — use `{cbe}` (**e**mpty) or `{cbc}` (**c**hecked). Same meaning: `{checkbox_empty}` / `{checkbox_checked}`, `{cb_empty}` / `{cb_checked}`.
 
 **Dynamic checkboxes:** `{6m}` `{6f}`; `{8s}` `{8m}` or `{8a}`…`{8f}`; `{sex_check_*}`; `{marital_check_*}`; `{24y}` `{24n}` `{25y}` `{25n}` — from `sex`, `marital_status`, Turkey history. All use Unicode **☐** / **☑** in text runs (same as before Webdings experiments).
@@ -290,6 +292,127 @@ def _flat_first_by_normalized_key(flat: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+# Normalized nationality / country wording (lowercase) → country of birth for `{maid_country_of_birth}`.
+_NATIONALITY_TO_COUNTRY_OF_BIRTH: Dict[str, str] = {
+    "filipino": "Philippines",
+    "filipina": "Philippines",
+    "philippine": "Philippines",
+    "philippines": "Philippines",
+    "phillipines": "Philippines",
+    "phillippines": "Philippines",
+    "indian": "India",
+    "india": "India",
+    "nepali": "Nepal",
+    "nepalese": "Nepal",
+    "nepal": "Nepal",
+    "sri lankan": "Sri Lanka",
+    "srilankan": "Sri Lanka",
+    "bangladeshi": "Bangladesh",
+    "bangladesh": "Bangladesh",
+    "pakistani": "Pakistan",
+    "pakistan": "Pakistan",
+    "indonesian": "Indonesia",
+    "indonesia": "Indonesia",
+    "ethiopian": "Ethiopia",
+    "ethiopia": "Ethiopia",
+    "ugandan": "Uganda",
+    "uganda": "Uganda",
+    "kenyan": "Kenya",
+    "kenya": "Kenya",
+    "egyptian": "Egypt",
+    "egypt": "Egypt",
+    "sudanese": "Sudan",
+    "sudan": "Sudan",
+    "syrian": "Syria",
+    "syria": "Syria",
+    "jordanian": "Jordan",
+    "jordan": "Jordan",
+    "lebanese": "Lebanon",
+    "lebanon": "Lebanon",
+    "vietnamese": "Vietnam",
+    "vietnam": "Vietnam",
+    "viet nam": "Vietnam",
+    "chinese": "China",
+    "china": "China",
+    "thai": "Thailand",
+    "thailand": "Thailand",
+    "burmese": "Myanmar",
+    "myanmar": "Myanmar",
+    "cambodian": "Cambodia",
+    "cambodia": "Cambodia",
+    "laotian": "Laos",
+    "lao": "Laos",
+    "laos": "Laos",
+    "malaysian": "Malaysia",
+    "malaysia": "Malaysia",
+    "nigerian": "Nigeria",
+    "nigeria": "Nigeria",
+    "ghanaian": "Ghana",
+    "ghana": "Ghana",
+    "turkish": "Turkey",
+    "turkey": "Turkey",
+    "iranian": "Iran",
+    "iran": "Iran",
+    "iraqi": "Iraq",
+    "iraq": "Iraq",
+    "afghan": "Afghanistan",
+    "afghanistani": "Afghanistan",
+    "afghanistan": "Afghanistan",
+    "russian": "Russia",
+    "russia": "Russia",
+    "ukrainian": "Ukraine",
+    "ukraine": "Ukraine",
+    "british": "United Kingdom",
+    "english": "United Kingdom",
+    "uk": "United Kingdom",
+    "united kingdom": "United Kingdom",
+    "american": "United States",
+    "u.s.": "United States",
+    "us": "United States",
+    "usa": "United States",
+    "united states": "United States",
+}
+
+_NATIONALITY_SOURCE_KEYS: Tuple[str, ...] = (
+    "maid_nationality",
+    "nationality",
+    "maid_nationality_in_passport",
+    "nationality_of_maid",
+    "worker_nationality",
+)
+
+
+def _nationality_raw_from_flat(flat: Dict[str, Any]) -> str:
+    by_nk = _flat_first_by_normalized_key(flat)
+    for nk in _NATIONALITY_SOURCE_KEYS:
+        if nk not in by_nk:
+            continue
+        v = by_nk[nk]
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s:
+            return s
+    return ""
+
+
+def maid_country_of_birth_from_nationality(flat: Dict[str, Any]) -> str:
+    """
+    Country name for `{maid_country_of_birth}` from nationality text (not from a dedicated body field).
+    """
+    raw = _nationality_raw_from_flat(flat)
+    if not raw:
+        return ""
+    key = re.sub(r"\s+", " ", raw.strip().lower())
+    if key in _NATIONALITY_TO_COUNTRY_OF_BIRTH:
+        return _NATIONALITY_TO_COUNTRY_OF_BIRTH[key]
+    if key.startswith("the "):
+        key = key[4:].strip()
+        if key in _NATIONALITY_TO_COUNTRY_OF_BIRTH:
+            return _NATIONALITY_TO_COUNTRY_OF_BIRTH[key]
+    return ""
+
+
 def _first_parsed_date(by_nk: Dict[str, Any], keys: Tuple[str, ...]) -> Optional[date]:
     for nk in keys:
         if nk in by_nk:
@@ -360,6 +483,9 @@ def build_replacements(flat: Dict[str, Any]) -> Dict[str, str]:
     # Always override body when dates yield a valid inclusive stay (Zoho often sends stale text).
     if days is not None:
         values["visa_duration"] = "1 day" if days == 1 else f"{days} days"
+
+    # Derived from maid_nationality — do not use request `maid_country_of_birth` if sent.
+    values["maid_country_of_birth"] = _sanitize_for_word(maid_country_of_birth_from_nationality(flat))
 
     # Word typo `{client)email}` → normalize_key gives `clientemail`, not `client_email`
     if "client_email" in values:
