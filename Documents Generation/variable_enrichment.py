@@ -168,6 +168,8 @@ def enrich_variables(
         )
         days = compute_trip_duration_days(dep, ret)
         if days is not None:
-            out["trip_duration"] = f"{days} days"
+            # Template already has a hardcoded " days" word after {{trip_duration}};
+            # storing just the number prevents the "X days days" duplication.
+            out["trip_duration"] = str(days)
 
     return out

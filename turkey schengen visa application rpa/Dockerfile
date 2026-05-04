@@ -17,6 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Scan visaform.docx and insert missing placeholders ({rvisa_number}, {current_citizenship},
+# {citizenship_at_birth}) if they are absent from the template.
+RUN python scripts/patch_visaform_placeholders.py
+
 ENV PYTHONUNBUFFERED=1
 
 # Railway sets PORT; default 8092 for local docker run

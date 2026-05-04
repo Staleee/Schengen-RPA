@@ -8,7 +8,9 @@
     "client_name": "{{client_name}}",
     "client_passport_number": "{{client_passport_number}}",
     "employment_start_date": "{{employment_start_date}}",
-    "maid_rvisa_number": "{{maid_rvisa_number}}"
+    "maid_rvisa_number": "{{maid_rvisa_number}}",
+    "is_turkey": "{{is_turkey}}",
+    "addressee": "{{addressee}}"
   },
   "sponsor": {
     "client_name": "{{client_name}}",
@@ -23,7 +25,9 @@
     "departure_date": "{{departure_date}}",
     "return_date": "{{return_date}}",
     "client_phone_number": "{{client_phone_number}}",
-    "client_email_address": "{{client_email_address}}"
+    "client_email_address": "{{client_email_address}}",
+    "is_turkey": "{{is_turkey}}",
+    "addressee": "{{addressee}}"
   },
   "invitation": {
     "schengen_country": "{{schengen_country}}",
@@ -38,6 +42,8 @@
     "city": "{{city}}",
     "hotel_address": "{{hotel_address}}",
     "client_phone_number": "{{client_phone_number}}",
-    "client_email_address": "{{client_email_address}}"
+    "client_email_address": "{{client_email_address}}",
+    "is_turkey": "{{is_turkey}}",
+    "addressee": "{{addressee}}"
   }
 }

@@ -351,6 +351,8 @@ _NATIONALITY_TO_COUNTRY_OF_BIRTH: Dict[str, str] = {
     "ghana": "Ghana",
     "turkish": "Turkey",
     "turkey": "Turkey",
+    "turkmen": "Turkmenistan",
+    "turkmenistan": "Turkmenistan",
     "iranian": "Iran",
     "iran": "Iran",
     "iraqi": "Iraq",
@@ -490,6 +492,14 @@ def build_replacements(flat: Dict[str, Any]) -> Dict[str, str]:
     # Word typo `{client)email}` → normalize_key gives `clientemail`, not `client_email`
     if "client_email" in values:
         values["clientemail"] = values["client_email"]
+
+    # Templates use mixed case for R-Visa: `{RVisa_number}` and `{RVisa_expiry_date}`.
+    # `normalize_key("RVisa_number")` → "r_visa_number" (split at the lowercase boundary),
+    # but the request body uses `rvisa_number` → "rvisa_number". Bridge both forms.
+    if "rvisa_number" in values:
+        values["r_visa_number"] = values["rvisa_number"]
+    if "rvisa_expiry_date" in values:
+        values["r_visa_expiry_date"] = values["rvisa_expiry_date"]
 
     # Static rows: `{cbe}` / `{cbc}` (and aliases) — override JSON
     for rk, rv in _reserved_checkbox_glyph_placeholders().items():
