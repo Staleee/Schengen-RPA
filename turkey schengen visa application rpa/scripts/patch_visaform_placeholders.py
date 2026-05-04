@@ -68,29 +68,71 @@ def _append_placeholder_to_cell(cell, placeholder: str) -> None:
     # Don't apply bold – let fill_turkey_docx_bytes handle it naturally
 
 
+def _row_has_any_placeholder(row, exclude: set[str] | None = None) -> bool:
+    """Return True if any cell in this row contains a `{...}` placeholder.
+
+    `exclude` is a set of placeholder *names* (without braces) to ignore — used so
+    decorative checkbox markers like `{cbe}`/`{cbc}` don't count as a real value
+    for the labeled field.
+    """
+    exclude = exclude or set()
+    for cell in row.cells:
+        for para in cell.paragraphs:
+            text = "".join(r.text for r in para.runs)
+            for m in _SINGLE_BRACE_RE.finditer(text):
+                name = m.group(1).strip()
+                if name not in exclude:
+                    return True
+    return False
+
+
+_DECORATIVE_PLACEHOLDERS = {"cbe", "cbc", "cbo"}
+
+
 def _try_add_in_tables(doc: Document, placeholder: str, keywords: list[str]) -> bool:
     """
     Try to find a table row where one cell is a label matching keywords,
-    and the next cell either is empty or lacks the placeholder.
-    Returns True if the placeholder was inserted.
+    and the *same row* has no real placeholder yet.
+    Returns True if the placeholder was inserted (or is already covered).
+
+    IMPORTANT: We deliberately scope the check to the same row as the matching
+    label. The previous behaviour walked sibling cells across the row and would
+    happily plant `{current_citizenship}` inside the Spouse section's
+    "Nationality" cell because the keyword list included "nationality". Now we:
+
+    - First, look for a value cell within the same row that already contains a
+      real (non-decorative) placeholder. If one exists, treat the field as
+      already covered and DO NOT insert anything.
+    - Otherwise, append the placeholder to the cell directly to the right of the
+      label cell. We never wander into other rows.
     """
     for table in doc.tables:
         for row in table.rows:
             cells = row.cells
+            label_cell_index: int | None = None
             for i, cell in enumerate(cells):
-                label = _cell_text(cell)
-                if not _label_matches(label, keywords):
-                    continue
-                # Look at the next cell(s) for the value field
-                for j in range(i + 1, len(cells)):
-                    val_cell = cells[j]
-                    val_text = _cell_text(val_cell)
-                    if f"{{{placeholder}}}" in val_text:
-                        return True  # Already there
-                    if not val_text or not _SINGLE_BRACE_RE.search(val_text):
-                        _append_placeholder_to_cell(val_cell, placeholder)
-                        print(f"    Inserted {{{placeholder}}} in cell after '{label}'")
-                        return True
+                if _label_matches(_cell_text(cell), keywords):
+                    label_cell_index = i
+                    break
+            if label_cell_index is None:
+                continue
+
+            # Already covered (by an existing placeholder in the row)?
+            if _row_has_any_placeholder(row, exclude=_DECORATIVE_PLACEHOLDERS):
+                # Verify the existing placeholder isn't just decorative — if so
+                # the labeled field is filled by some other key in
+                # build_replacements and we should leave the template alone.
+                return True
+
+            # Insert into the cell immediately after the label.
+            target_index = label_cell_index + 1
+            if target_index >= len(cells):
+                continue
+            val_cell = cells[target_index]
+            _append_placeholder_to_cell(val_cell, placeholder)
+            label = _cell_text(cells[label_cell_index])
+            print(f"    Inserted {{{placeholder}}} in cell after '{label}'")
+            return True
     return False
 
 
@@ -98,70 +140,6 @@ def _try_add_in_tables(doc: Document, placeholder: str, keywords: list[str]) -> 
 # always appends the unit). Templates that have a hardcoded " days" word right after
 # the placeholder render as "15 days days". Strip those duplicate units.
 _DUPLICATE_DAYS_RE = re.compile(r"(\{visa_duration\})\s+days\b", re.IGNORECASE)
-
-# Sections 35 (Spouse) and 36 (Children) of the visa form must NOT be auto-filled
-# with the applicant's data, but the original template re-uses applicant
-# placeholders (e.g. `{maid_nationality}`) inside those rows. Wipe any
-# single-brace placeholders we find under those sections.
-_SPOUSE_CHILDREN_MARKERS = (
-    "spouse",
-    "children",
-    "35.",
-    "36.",
-)
-
-
-def _strip_placeholders_from_spouse_children(doc: Document) -> int:
-    """Remove any `{placeholder}` text from cells inside any table that contains
-    a "Spouse" / "Children" / "35." / "36." marker. Returns the number of edits.
-
-    The visa form uses applicant placeholders (e.g. `{maid_nationality}`) inside
-    the Spouse and Children rows, which causes the applicant's data to leak
-    into those sections at fill time. Stripping the placeholders leaves those
-    cells truly blank for unmarried applicants.
-    """
-    edits = 0
-
-    def cell_text(cell) -> str:
-        return "".join(p.text for p in cell.paragraphs).lower()
-
-    def table_is_target(table) -> bool:
-        for row in table.rows:
-            for cell in row.cells:
-                t = cell_text(cell)
-                if any(marker in t for marker in _SPOUSE_CHILDREN_MARKERS):
-                    return True
-        return False
-
-    def strip_paragraph(paragraph) -> bool:
-        nonlocal edits
-        full_text = "".join(run.text for run in paragraph.runs)
-        if not _SINGLE_BRACE_RE.search(full_text):
-            return False
-        new_text = _SINGLE_BRACE_RE.sub("", full_text)
-        if new_text == full_text:
-            return False
-        for run in list(paragraph.runs):
-            run._r.getparent().remove(run._r)
-        if new_text:
-            paragraph.add_run(new_text)
-        edits += 1
-        return True
-
-    for table in doc.tables:
-        if not table_is_target(table):
-            continue
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    strip_paragraph(para)
-                for nested in cell.tables:
-                    for nrow in nested.rows:
-                        for ncell in nrow.cells:
-                            for para in ncell.paragraphs:
-                                strip_paragraph(para)
-    return edits
-
 
 def _strip_duplicate_days(doc: Document) -> int:
     """Find paragraphs (incl. table cells) where `{visa_duration}` is followed by a
@@ -217,11 +195,6 @@ def patch_template(path: Path) -> None:
     duplicate_edits = _strip_duplicate_days(doc)
     if duplicate_edits:
         print(f"  Removed redundant ' days' word after {{visa_duration}} ({duplicate_edits} edit(s))")
-        changed = True
-
-    spouse_edits = _strip_placeholders_from_spouse_children(doc)
-    if spouse_edits:
-        print(f"  Cleared {spouse_edits} placeholder(s) from Spouse/Children sections")
         changed = True
 
     if changed:
