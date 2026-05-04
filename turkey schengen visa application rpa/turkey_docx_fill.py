@@ -522,34 +522,53 @@ def flatten_payload(body: Dict[str, Any]) -> Dict[str, Any]:
 
 def _paragraph_base_run_font(paragraph):
     """
-    Font for rebuilt runs: prefer the **largest** explicit run size in the paragraph so static
-    symbols (e.g. ☐) stay visible when placeholders sit in smaller runs; fall back to style.
+    Choose a font/size to apply to rebuilt runs in this paragraph.
+
+    Strategy:
+      1. If any run contains a `{` (placeholder start), use *that* run's font &
+         size. This keeps substituted values (e.g. "62 days") at the same size
+         as the placeholder was authored, so they don't suddenly become huge
+         when the paragraph also contains a larger heading-style run such as
+         the section number "23." or a checkbox glyph "\u2610".
+      2. Otherwise fall back to the first run that has any explicit size.
+      3. Otherwise fall back to the paragraph style.
     """
-    best_size = None
-    best_font = None
+    placeholder_size = None
+    placeholder_font = None
+    first_size = None
+    first_font = None
+
     for run in paragraph.runs:
-        if run.font.size is not None:
-            if best_size is None or run.font.size.pt > best_size.pt:
-                best_size = run.font.size
-                if run.font.name:
-                    best_font = run.font.name
-        elif run.font.name and not best_font:
-            best_font = run.font.name
-    if best_size is None:
+        if not run.text:
+            continue
+        size = run.font.size
+        name = run.font.name
+        if "{" in run.text and placeholder_size is None and size is not None:
+            placeholder_size = size
+            placeholder_font = name
+        if first_size is None and size is not None:
+            first_size = size
+        if not first_font and name:
+            first_font = name
+
+    chosen_size = placeholder_size or first_size
+    chosen_font = placeholder_font or first_font
+
+    if chosen_size is None:
         try:
             sf = paragraph.style.font.size
             if sf is not None:
-                best_size = sf
+                chosen_size = sf
         except (AttributeError, TypeError):
             pass
-    if not best_font:
+    if not chosen_font:
         try:
             fn = paragraph.style.font.name
             if fn:
-                best_font = fn
+                chosen_font = fn
         except (AttributeError, TypeError):
             pass
-    return best_size, best_font
+    return chosen_size, chosen_font
 
 
 def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
@@ -576,11 +595,14 @@ def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
 
     for run in list(paragraph.runs):
         run._r.getparent().remove(run._r)
-    for text, is_bold in segments:
+    for text, _is_substituted in segments:
         if not text:
             continue
         r = paragraph.add_run(text)
-        r.bold = is_bold
+        # Don't force bold on substituted values: it makes filled fields stand
+        # out from the rest of the form (e.g. "62 days" rendered larger/bolder
+        # than its surrounding "Visa is requested for:" text). Inherit normal
+        # weight from the paragraph style.
         if base_size is not None:
             r.font.size = base_size
         run_font = _font_name_for_run_text(text, base_font)

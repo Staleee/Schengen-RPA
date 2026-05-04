@@ -99,6 +99,69 @@ def _try_add_in_tables(doc: Document, placeholder: str, keywords: list[str]) -> 
 # the placeholder render as "15 days days". Strip those duplicate units.
 _DUPLICATE_DAYS_RE = re.compile(r"(\{visa_duration\})\s+days\b", re.IGNORECASE)
 
+# Sections 35 (Spouse) and 36 (Children) of the visa form must NOT be auto-filled
+# with the applicant's data, but the original template re-uses applicant
+# placeholders (e.g. `{maid_nationality}`) inside those rows. Wipe any
+# single-brace placeholders we find under those sections.
+_SPOUSE_CHILDREN_MARKERS = (
+    "spouse",
+    "children",
+    "35.",
+    "36.",
+)
+
+
+def _strip_placeholders_from_spouse_children(doc: Document) -> int:
+    """Remove any `{placeholder}` text from cells inside any table that contains
+    a "Spouse" / "Children" / "35." / "36." marker. Returns the number of edits.
+
+    The visa form uses applicant placeholders (e.g. `{maid_nationality}`) inside
+    the Spouse and Children rows, which causes the applicant's data to leak
+    into those sections at fill time. Stripping the placeholders leaves those
+    cells truly blank for unmarried applicants.
+    """
+    edits = 0
+
+    def cell_text(cell) -> str:
+        return "".join(p.text for p in cell.paragraphs).lower()
+
+    def table_is_target(table) -> bool:
+        for row in table.rows:
+            for cell in row.cells:
+                t = cell_text(cell)
+                if any(marker in t for marker in _SPOUSE_CHILDREN_MARKERS):
+                    return True
+        return False
+
+    def strip_paragraph(paragraph) -> bool:
+        nonlocal edits
+        full_text = "".join(run.text for run in paragraph.runs)
+        if not _SINGLE_BRACE_RE.search(full_text):
+            return False
+        new_text = _SINGLE_BRACE_RE.sub("", full_text)
+        if new_text == full_text:
+            return False
+        for run in list(paragraph.runs):
+            run._r.getparent().remove(run._r)
+        if new_text:
+            paragraph.add_run(new_text)
+        edits += 1
+        return True
+
+    for table in doc.tables:
+        if not table_is_target(table):
+            continue
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    strip_paragraph(para)
+                for nested in cell.tables:
+                    for nrow in nested.rows:
+                        for ncell in nrow.cells:
+                            for para in ncell.paragraphs:
+                                strip_paragraph(para)
+    return edits
+
 
 def _strip_duplicate_days(doc: Document) -> int:
     """Find paragraphs (incl. table cells) where `{visa_duration}` is followed by a
@@ -154,6 +217,11 @@ def patch_template(path: Path) -> None:
     duplicate_edits = _strip_duplicate_days(doc)
     if duplicate_edits:
         print(f"  Removed redundant ' days' word after {{visa_duration}} ({duplicate_edits} edit(s))")
+        changed = True
+
+    spouse_edits = _strip_placeholders_from_spouse_children(doc)
+    if spouse_edits:
+        print(f"  Cleared {spouse_edits} placeholder(s) from Spouse/Children sections")
         changed = True
 
     if changed:
