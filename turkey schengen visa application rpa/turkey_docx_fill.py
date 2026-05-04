@@ -599,7 +599,7 @@ def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
         if not text:
             continue
         r = paragraph.add_run(text)
-        r.bold = is_bold
+        r.bold = _is_substituted
 
         # Don't force bold on substituted values: it makes filled fields stand
         # out from the rest of the form (e.g. "62 days" rendered larger/bolder
