@@ -94,6 +94,23 @@ def build_translated_data(data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         if (not merged.get(emp_key) or not str(merged.get(emp_key, "")).strip()) and merged.get(client_key):
             merged[emp_key] = merged[client_key]
 
+    # VIDEX marks **House number** as mandatory on Applicant address *and* Inviting
+    # person (same merged keys via field_translator). GCC tower addresses often
+    # look like "OLIVE POINT, Dubai" with no discrete number — parse_address keeps
+    # the whole token in `street` and leaves house_number blank → Contact data +
+    # Reference both fail validation.
+    _street_any = str(
+        merged.get("client_street") or merged.get("street") or merged.get("maid_street") or ""
+    ).strip()
+    if _street_any and not str(merged.get("client_house_number") or "").strip():
+        merged["client_house_number"] = "-"
+        if not str(merged.get("house_number") or "").strip():
+            merged["house_number"] = merged["client_house_number"]
+        if not str(merged.get("employer_house_number") or "").strip():
+            merged["employer_house_number"] = merged["client_house_number"]
+        if not str(merged.get("maid_house_number") or "").strip():
+            merged["maid_house_number"] = merged["client_house_number"]
+
     family_name = merged.get("maid_surname") or merged.get("surname") or merged.get("family_name")
     if family_name and (not merged.get("birth_name") and not merged.get("maiden_name")):
         merged["birth_name"] = family_name
@@ -139,6 +156,28 @@ def build_translated_data(data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
             or merged.get("maid_nationality")
             or ""
         )
+
+    # Travel data — VIDEX requires Schengen **Member State of first entry** and
+    # **Number of entries**. Sparse CRM rows often omit state_of_first_entry.
+    if not str(merged.get("first_entry_country", "") or "").strip():
+        for cand in (merged.get("main_destination"), merged.get("schengen_country")):
+            if cand and str(cand).strip():
+                merged["first_entry_country"] = str(cand).strip()
+                break
+
+    if not str(merged.get("number_of_entries", "") or "").strip():
+        merged["number_of_entries"] = "Single entry"
+
+    # Inviting person date of birth (Reference). VIDEX flags this row red when
+    # empty; CRM sometimes stores it only under alternate keys.
+    if not str(merged.get("client_date_of_birth", "") or "").strip():
+        alt = (
+            merged.get("inviter_date_of_birth")
+            or merged.get("inviter_birth_date")
+            or merged.get("householder_date_of_birth")
+        )
+        if alt and str(alt).strip():
+            merged["client_date_of_birth"] = alt
 
     translator = FieldTranslator(defaults_path=None)
     translated_data = translator.translate_data(merged)
