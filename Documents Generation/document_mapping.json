@@ -10,7 +10,9 @@
     "employment_start_date": "{{employment_start_date}}",
     "maid_rvisa_number": "{{maid_rvisa_number}}",
     "is_turkey": "{{is_turkey}}",
-    "addressee": "{{addressee}}"
+    "addressee": "{{addressee}}",
+    "addressee_body": "{{addressee_body}}",
+    "addressee_location": "{{addressee_location}}"
   },
   "sponsor": {
     "client_name": "{{client_name}}",
@@ -27,7 +29,9 @@
     "client_phone_number": "{{client_phone_number}}",
     "client_email_address": "{{client_email_address}}",
     "is_turkey": "{{is_turkey}}",
-    "addressee": "{{addressee}}"
+    "addressee": "{{addressee}}",
+    "addressee_body": "{{addressee_body}}",
+    "addressee_location": "{{addressee_location}}"
   },
   "invitation": {
     "schengen_country": "{{schengen_country}}",
@@ -44,6 +48,8 @@
     "client_phone_number": "{{client_phone_number}}",
     "client_email_address": "{{client_email_address}}",
     "is_turkey": "{{is_turkey}}",
-    "addressee": "{{addressee}}"
+    "addressee": "{{addressee}}",
+    "addressee_body": "{{addressee_body}}",
+    "addressee_location": "{{addressee_location}}"
   }
 }

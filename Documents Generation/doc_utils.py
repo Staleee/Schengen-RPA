@@ -112,17 +112,34 @@ _EMBASSY_PHRASE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Stand-alone city paragraph (cover/sponsor letters keep "Abu Dhabi, United Arab
-# Emirates" on its own line below the embassy line; in Turkey mode we drop it).
+# Stand-alone city paragraph (the templates carry "Abu Dhabi, United Arab
+# Emirates" on its own line below the embassy line). When the addressee block
+# is replaced we either swap this line for the new location or clear it,
+# depending on whether the caller sent a two-line or legacy single-line
+# addressee.
 _CITY_LINE_RE = re.compile(r"^\s*(Abu\s*Dhabi|Dubai)(\s*[,\-\u2013].*)?$", re.IGNORECASE)
 
 
-def _replace_embassy_block_with_addressee(paragraphs_in_order, addressee: str) -> None:
-    """For Turkey mode: find the first paragraph that contains an
-    "Embassy of <country>" / "Consulate of <country>" / "Embassy/Consulate of
-    <country>" phrase (including any trailing "– <city>") and substitute that
-    phrase with the addressee value. If the paragraph immediately following is
-    a stand-alone city line ("Abu Dhabi, ...", "Dubai, ..."), clear it too."""
+def _replace_embassy_block_with_addressee(
+    paragraphs_in_order,
+    addressee: str,
+    location: str = "",
+) -> None:
+    """Find the first paragraph containing an "Embassy of <country>" / "Consulate
+    of <country>" / "Embassy/Consulate of <country>" phrase (including any
+    trailing "– <city>") and substitute that phrase with ``addressee``.
+
+    Also handles the standalone city line that lives on its own paragraph below
+    (e.g. "Abu Dhabi, United Arab Emirates"):
+
+      * When ``location`` is provided, the city paragraph is replaced with the
+        new location text. This is the two-line addressee mode used for all
+        Schengen countries — the addressee body goes on line 1 and the city /
+        country line goes on line 2 ("Consulate of Croatia" / "Dubai, United
+        Arab Emirates").
+      * When ``location`` is empty (legacy single-line Turkey mode), the city
+        paragraph is cleared instead so the document doesn't show a stale city.
+    """
     if not addressee:
         return
     for i, para in enumerate(paragraphs_in_order):
@@ -136,10 +153,11 @@ def _replace_embassy_block_with_addressee(paragraphs_in_order, addressee: str) -
             run._r.getparent().remove(run._r)
         para.add_run(new_text)
 
-        # Drop the immediately-following standalone city paragraph (only when the
-        # original embassy paragraph was a clean line, i.e. no other text around
-        # the matched phrase). Otherwise the city info likely lives on a later
-        # line of the same paragraph and our replacement already handled it.
+        # Update / clear the immediately-following standalone city paragraph
+        # only when the original embassy paragraph was a clean line (no other
+        # text around the matched phrase). Otherwise the city info likely lives
+        # on a later line of the same paragraph and our replacement already
+        # handled it.
         if match.start() == 0 and match.end() == len(full_text.rstrip()):
             for offset in (1, 2):
                 j = i + offset
@@ -152,6 +170,8 @@ def _replace_embassy_block_with_addressee(paragraphs_in_order, addressee: str) -
                 if _CITY_LINE_RE.match(next_text):
                     for run in list(next_para.runs):
                         run._r.getparent().remove(run._r)
+                    if location:
+                        next_para.add_run(location)
                 break
         return  # Only replace the first match.
 
@@ -245,19 +265,34 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
     # Body: paragraphs and tables
     process_block(doc.paragraphs, doc.tables)
 
-    # Turkey mode: replace the "Embassy of <country>" + city block in the To:
-    # section with the addressee value (e.g. "Embassy of Turkey – Abu Dhabi" or
-    # "Consulate of Turkey – Dubai") so the document doesn't contradict itself
-    # for Dubai-based clients.
-    if _is_turkey:
-        addressee = normalized.get("addressee", "").strip()
-        if addressee:
-            ordered_paragraphs = list(doc.paragraphs)
-            for table in doc.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        ordered_paragraphs.extend(cell.paragraphs)
-            _replace_embassy_block_with_addressee(ordered_paragraphs, addressee)
+    # Replace the "Embassy of <country>" + city block in the To: section so the
+    # letter addresses the office that will actually process the visa
+    # application (Embassy in Abu Dhabi vs. Consulate in Dubai). This applies to
+    # all Schengen countries — the caller decides Embassy vs. Consulate from the
+    # client's UAE address and passes the result via:
+    #
+    #   * addressee_body     — line 1, e.g. "Embassy of Croatia" / "Consulate of Croatia"
+    #   * addressee_location — line 2, e.g. "Abu Dhabi, United Arab Emirates" / "Dubai, United Arab Emirates"
+    #
+    # The legacy single-line ``addressee`` (e.g. "Consulate of Turkey – Dubai")
+    # is still accepted for backwards compatibility with older callers; in that
+    # mode the city line below is cleared rather than replaced.
+    addressee_body = normalized.get("addressee_body", "").strip()
+    addressee_location = normalized.get("addressee_location", "").strip()
+    legacy_addressee = normalized.get("addressee", "").strip()
+
+    if addressee_body or legacy_addressee:
+        ordered_paragraphs = list(doc.paragraphs)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    ordered_paragraphs.extend(cell.paragraphs)
+        if addressee_body:
+            _replace_embassy_block_with_addressee(
+                ordered_paragraphs, addressee_body, addressee_location
+            )
+        else:
+            _replace_embassy_block_with_addressee(ordered_paragraphs, legacy_addressee)
 
     # Headers and footers (where maid_full_name at bottom/signature often lives)
     for section in doc.sections:
