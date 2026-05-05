@@ -103,6 +103,10 @@ class VidexFormFiller:
         self.page: Optional[Page] = None
         self.pdf_path: Optional[Path] = None
         self.validation_error: Optional[str] = None
+        # When VIDEX rejects the form we capture every ng-invalid wrapper
+        # (label, surrounding text, current value) so the API caller can see
+        # what the human user would see as red borders.
+        self.invalid_wrappers: list[dict] = []
         self._load_field_mappings()
 
     @staticmethod
@@ -1460,6 +1464,7 @@ class VidexFormFiller:
             "success_count": sum(1 for v in results.values() if v),
             "fail_count": len(results) - sum(1 for v in results.values() if v),
             "validation_error": getattr(self, "validation_error", None),
+            "invalid_wrappers": getattr(self, "invalid_wrappers", []),
         }
 
     def _submit_form(self) -> None:
@@ -1696,8 +1701,13 @@ class VidexFormFiller:
                     console.print(f"  • card={w['card']!r}")
                     console.print(f"    label={w['label']!r} inner=<{w['inner_tag']} id={w['inner_id']!r} type={w['inner_type']!r} value={w['inner_value']!r}>")
                     console.print(f"    context={w['context']!r}")
+                # Persist for the caller (api.py) so the HTTP response can
+                # include the diagnostic without forcing the operator to dig
+                # into Railway logs.
+                self.invalid_wrappers = wrappers
             except Exception as e:
                 console.print(f"[red]wrapper dump failed: {e}[/red]")
+                self.invalid_wrappers = []
             return None
 
         # Step 2: Find and click "Download PDF" button in the popup

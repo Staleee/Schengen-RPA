@@ -86,6 +86,7 @@ def main() -> int:
         "fail_count": result.get("fail_count", result.get("failed", 0)),
         "fields": result.get("fields") or {},
         "validation_error": result.get("validation_error"),
+        "invalid_wrappers": result.get("invalid_wrappers") or [],
         "error": result.get("error"),
         "pdf_base64": pdf_b64,
     }

@@ -208,6 +208,7 @@ def fill_form(data: dict[str, Any]):
     fields_map = result.get("fields") or {}
     failed_fields = sorted([fid for fid, ok in fields_map.items() if not ok])
     validation_error = result.get("validation_error")
+    invalid_wrappers = result.get("invalid_wrappers") or []
     if validation_error:
         stage = "videx_validation_error"
         error_msg = f"VIDEX rejected the form: {validation_error}"
@@ -217,6 +218,19 @@ def fill_form(data: dict[str, Any]):
     else:
         stage = "save_pdf_returned_none"
         error_msg = "PDF generation failed (Continue → Download PDF popup not captured)"
+    # Compress wrapper info into a flat list of {section, label, current_value,
+    # context_snippet} so callers see exactly which red-bordered fields VIDEX
+    # is complaining about, no Railway log dive required.
+    invalid_summary = [
+        {
+            "section": w.get("card"),
+            "label": w.get("label"),
+            "field_id": w.get("inner_id") or None,
+            "current_value": w.get("inner_value"),
+            "context": w.get("context"),
+        }
+        for w in invalid_wrappers[:25]
+    ]
     raise HTTPException(
         status_code=500,
         detail={
@@ -226,6 +240,7 @@ def fill_form(data: dict[str, Any]):
             "fields_failed": fail_count,
             "failed_fields": failed_fields[:50],
             "validation_error": validation_error,
+            "invalid_fields": invalid_summary,
         },
     )
 
