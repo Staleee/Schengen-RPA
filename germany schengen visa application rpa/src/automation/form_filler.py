@@ -23,6 +23,10 @@ FORM_SECTIONS = [
         "antragsteller.familienname", "antragsteller.vorname", "antragsteller.geburtsdatum",
         "antragsteller.geburtsort", "antragsteller.geburtsland", "antragsteller.geschlecht",
         "antragsteller.familienstand", "antragsteller.staatsangehoerigkeitListe",
+        # VIDEX requires "Original nationality" (Nationality at birth) on the
+        # Personal-data block; without this prefix the field was being silently
+        # dropped from every section and never filled.
+        "antragsteller.staatsangehoerigkeitBeiGeburtListe",
         "antragsteller.geburtsname", "rechtAufFreizuegigkeit",
     ]),
     ("2. Occupation", [
@@ -98,6 +102,7 @@ class VidexFormFiller:
         self.field_mappings: dict[str, dict] = {}
         self.page: Optional[Page] = None
         self.pdf_path: Optional[Path] = None
+        self.validation_error: Optional[str] = None
         self._load_field_mappings()
 
     @staticmethod
@@ -108,8 +113,20 @@ class VidexFormFiller:
                 return True
         return False
 
+    # Fields that depend on a parent control being checked first (so their UI
+    # is rendered) — process them last within their section.
+    _DEFERRED_PREFIXES = (
+        "reisedaten.lebensunterhalt.",  # revealed by checking a "third party" payer
+    )
+
     def _get_fields_for_section(self, section_index: int) -> list[str]:
-        """Return ordered list of field IDs in self.data that belong to this section and have a value to set."""
+        """Return ordered list of field IDs in self.data that belong to this section.
+
+        Within a section we sort alphabetically for determinism, but defer any
+        fields under ``_DEFERRED_PREFIXES`` to the end so their parent toggles
+        (e.g. "a third party"/"the inviting person" in section 9) are checked
+        first and the dependent sub-section actually renders.
+        """
         if section_index < 0 or section_index >= len(FORM_SECTIONS):
             return []
         _, prefixes = FORM_SECTIONS[section_index]
@@ -123,7 +140,10 @@ class VidexFormFiller:
             if val == "" and not isinstance(val, bool):
                 continue
             out.append(field_id)
-        return sorted(out)  # stable order
+        out.sort()
+        primary = [f for f in out if not f.startswith(self._DEFERRED_PREFIXES)]
+        deferred = [f for f in out if f.startswith(self._DEFERRED_PREFIXES)]
+        return primary + deferred
 
     def _scroll_field_into_view(self, field_id: str) -> None:
         """Scroll so the element for this field is in view."""
@@ -172,7 +192,8 @@ class VidexFormFiller:
         filepath = self.screenshot_dir / f"{name}_{timestamp}.png"
         
         try:
-            self.page.screenshot(path=str(filepath))
+            # Full page so we can see every section, not just the viewport.
+            self.page.screenshot(path=str(filepath), full_page=True)
             console.print(f"[cyan]Screenshot saved: {filepath}[/cyan]")
             return filepath
         except Exception as e:
@@ -180,25 +201,47 @@ class VidexFormFiller:
             return None
 
     def _switch_to_english(self) -> bool:
-        """Switch the form language to English."""
+        """Switch the form language to English. The change triggers a full
+        re-render of the Angular form, so we wait for the first applicant
+        input *and* a select option to be present afterwards — without that
+        wait, the very first fields (familienname, familienstand) sometimes
+        race the re-render and silently fail."""
         console.print("[cyan]Switching language to English...[/cyan]")
-        
         try:
-            # The VIDEX language selector is the first <select> on the page
             lang_selector = self.page.locator("select").first
-            if lang_selector.is_visible(timeout=2000):
-                try:
-                    lang_selector.select_option(label="English")
-                    console.print("[green]Language switched to English[/green]")
-                    self.page.wait_for_timeout(600)
-                    self.page.wait_for_load_state("domcontentloaded", timeout=5000)
-                    return True
-                except Exception as e:
-                    console.print(f"[yellow]Could not select English: {e}[/yellow]")
-            
-            console.print("[yellow]Language selector not found, page may already be in English[/yellow]")
-            return False
-            
+            if not lang_selector.is_visible(timeout=2000):
+                console.print("[yellow]Language selector not found, page may already be in English[/yellow]")
+                return False
+            try:
+                lang_selector.select_option(label="English")
+            except Exception as e:
+                console.print(f"[yellow]Could not select English: {e}[/yellow]")
+                return False
+
+            console.print("[green]Language switched to English[/green]")
+            try:
+                self.page.wait_for_load_state("domcontentloaded", timeout=10000)
+            except Exception:
+                pass
+
+            # Wait for the first applicant input AND the marital-status dropdown
+            # to be fully populated before returning. Without this, fills race
+            # the Angular re-render after the language switch.
+            try:
+                self.page.wait_for_selector(
+                    'input[id="antragsteller.familienname"]', state="visible", timeout=15000
+                )
+                self.page.wait_for_function(
+                    """() => {
+                        const sel = document.querySelector('select[id="antragsteller.familienstand"]');
+                        return sel && sel.options && sel.options.length > 1;
+                    }""",
+                    timeout=15000,
+                )
+            except Exception as wait_err:
+                console.print(f"[yellow]Post-language-switch wait incomplete: {wait_err}[/yellow]")
+            self.page.wait_for_timeout(400)
+            return True
         except Exception as e:
             console.print(f"[yellow]Error switching language: {e}[/yellow]")
             return False
@@ -225,6 +268,244 @@ class VidexFormFiller:
             return element
         except PlaywrightTimeout:
             return None
+
+    def _dump_invalid_inputs(self, label: str = "") -> None:
+        """Print every <input>/<select>/<textarea> currently flagged as
+        ng-invalid by Angular OR sitting under a mandatory (`*`) label with
+        no value. Useful right after VIDEX shows its validation modal."""
+        console.print(f"[cyan]Querying invalid inputs ({label})...[/cyan]")
+        try:
+            invalid = self.page.evaluate(
+                """
+                () => {
+                  const out = [];
+                  // 1) Anything Angular itself marked invalid.
+                  const ngInvalid = document.querySelectorAll(
+                    'input.ng-invalid, select.ng-invalid, textarea.ng-invalid'
+                  );
+                  // 2) Anything visually "required" (label with leading * or
+                  //    aria-required) that is empty.
+                  const candidates = new Set(ngInvalid);
+                  for (const lbl of document.querySelectorAll('label, .col-form-label, span, div')) {
+                    const txt = (lbl.textContent || '').trim();
+                    if (!txt.startsWith('*')) continue;
+                    // Find the input(s) bound to this label
+                    let scope = lbl.closest('.row, .col-md-3, .col-md-4, .col-md-6, .col-md-12, .form-group, .card, .form-check') || lbl.parentElement;
+                    if (!scope) continue;
+                    for (const el of scope.querySelectorAll('input,select,textarea')) {
+                      if (el.type === 'hidden') continue;
+                      if (el.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) {
+                        // skip checkbox groups for the empty check
+                        continue;
+                      }
+                      const v = (el.value || '').trim();
+                      if (!v) candidates.add(el);
+                    }
+                  }
+                  for (const el of candidates) {
+                    let lbl = '';
+                    if (el.id) {
+                      const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+                      if (l) lbl = (l.textContent || '').trim();
+                    }
+                    if (!lbl) {
+                      const wrap = el.closest('label, .form-group, .row, .col-md-3, .col-md-4, .col-md-6, .col-md-12');
+                      if (wrap) lbl = (wrap.textContent || '').trim().split('\\n')[0].slice(0, 80);
+                    }
+                    out.push({
+                      id: el.id || null,
+                      name: el.getAttribute('name'),
+                      type: el.tagName + (el.type ? ':' + el.type : ''),
+                      value: (el.value || '').slice(0, 40),
+                      label: lbl.slice(0, 80),
+                    });
+                    if (out.length >= 30) break;
+                  }
+                  return out;
+                }
+                """
+            )
+            if invalid:
+                console.print(f"[bold yellow]VIDEX flagged these inputs invalid ({len(invalid)}):[/bold yellow]")
+                for entry in invalid:
+                    console.print(f"  - {entry}")
+                self.invalid_inputs = invalid
+        except Exception as inv_err:
+            console.print(f"[yellow]Could not enumerate invalid inputs: {inv_err}[/yellow]")
+
+    def _extract_validation_modal_text(self) -> Optional[str]:
+        """If VIDEX shows the 'An error occurred' modal listing sections with
+        invalid mandatory fields, return a short summary string. Otherwise None.
+        """
+        try:
+            dialog = self.page.locator(
+                "[role='dialog']:visible, [role='alertdialog']:visible, .modal.show, .modal:visible"
+            ).first
+            if not dialog.is_visible(timeout=500):
+                return None
+            text = (dialog.inner_text(timeout=500) or "").strip()
+            lowered = text.lower()
+            if "error" in lowered and ("mandatory" in lowered or "fields" in lowered):
+                # Compress whitespace for a one-line summary
+                return " ".join(text.split())
+            return None
+        except Exception:
+            return None
+
+    def _click_checkbox_near_text(self, field_id: str, label_text: str) -> bool:
+        """
+        Click the <input type='checkbox'> that sits next to ``label_text`` in
+        document order. Used as a fallback when VIDEX renders the checkbox
+        without an `id` attribute (post-2025 Angular layout).
+
+        Strategy 1: Playwright's get_by_label (handles classic `<label>` shape).
+        Strategy 2: JS-side innermost-text-node lookup, then click the FIRST
+                    following input[type=checkbox] in document order.
+        """
+        try:
+            cb = self.page.get_by_label(label_text, exact=False).first
+            if cb.is_visible(timeout=1500):
+                cb.check(timeout=1500)
+                console.print(f"[green]Checked (by label) {field_id}: {label_text}[/green]")
+                self.page.wait_for_timeout(300)
+                return True
+        except Exception:
+            pass
+
+        try:
+            # Run the lookup entirely in the page so we pick the *innermost*
+            # element containing the text (xpath's `(//*[contains(...)])[1]`
+            # would otherwise return the outermost container — usually <body>).
+            handle = self.page.evaluate_handle(
+                """
+                (text) => {
+                  const lower = text.toLowerCase();
+                  const all = document.querySelectorAll('app-pass-restricted-checkbox-texts, label, span, p, div');
+                  // Pick innermost: smallest element whose own text contains the label.
+                  let best = null;
+                  for (const el of all) {
+                    const t = (el.innerText || el.textContent || '').toLowerCase();
+                    if (!t.includes(lower)) continue;
+                    // prefer elements with no children that themselves match
+                    const childMatch = Array.from(el.children).some(
+                      c => ((c.innerText || c.textContent || '').toLowerCase()).includes(lower)
+                    );
+                    if (childMatch) continue;
+                    best = el;
+                    break;
+                  }
+                  if (!best) return null;
+                  // Walk forward in document order to the first <input type=checkbox>.
+                  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+                  walker.currentNode = best;
+                  let n = walker.nextNode();
+                  while (n) {
+                    if (n.tagName === 'INPUT' && n.getAttribute('type') === 'checkbox') {
+                      return n;
+                    }
+                    n = walker.nextNode();
+                  }
+                  return null;
+                }
+                """,
+                label_text,
+            )
+            if handle is None:
+                console.print(f"[yellow]_click_checkbox_near_text: no element returned for {field_id}[/yellow]")
+                return False
+            element = handle.as_element()
+            if element is None:
+                console.print(f"[yellow]_click_checkbox_near_text: handle was not an Element for {field_id}[/yellow]")
+                return False
+            element.scroll_into_view_if_needed(timeout=1500)
+            try:
+                element.check(timeout=1500)
+            except Exception:
+                element.click(timeout=1500)
+            console.print(f"[green]Checked (near text) {field_id}: {label_text}[/green]")
+            self.page.wait_for_timeout(300)
+            return True
+        except Exception as e:
+            console.print(f"[yellow]_click_checkbox_near_text failed for {field_id}: {e}[/yellow]")
+        return False
+
+    def _click_yes_no_near_text(self, question: str, want_yes: bool) -> bool:
+        """
+        VIDEX 2025 renders some Yes/No questions as a pair of unidentified
+        <input type='checkbox'> elements (no id, no formcontrolname, only the
+        visible "Yes" / "No" labels). The visual default-checked state is *not*
+        registered with the form-control until the user actually clicks one of
+        them, so Angular keeps marking the wrapper invalid.
+        Examples currently affected:
+          - "Are you applying for yourself?"          (Personal details)
+          - "Have your fingerprints been collected previously…" (Documents)
+        Locate the question text, walk forward in document order, and click
+        the first checkbox (Yes) or the second checkbox (No).
+        """
+        idx = 0 if want_yes else 1
+        choice = "Yes" if want_yes else "No"
+        try:
+            # Anchor via Playwright's locator engine (handles text split across
+            # multiple <span>s, which is what VIDEX's Angular template does).
+            anchor = self.page.get_by_text(question, exact=False).first
+            if anchor.count() == 0 or not anchor.is_visible():
+                console.print(f"[yellow]_click_yes_no_near_text: anchor not visible for {question!r}[/yellow]")
+                return False
+            anchor.scroll_into_view_if_needed(timeout=1500)
+            handle = anchor.evaluate_handle(
+                """
+                (anchor, idx) => {
+                  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+                  walker.currentNode = anchor;
+                  const found = [];
+                  let n = walker.nextNode();
+                  while (n && found.length < 6) {
+                    if (n.tagName === 'INPUT' && n.getAttribute('type') === 'checkbox') {
+                      found.push(n);
+                    }
+                    n = walker.nextNode();
+                  }
+                  return found[idx] || null;
+                }
+                """,
+                idx,
+            )
+            element = handle.as_element() if handle else None
+            if element is None:
+                console.print(f"[yellow]_click_yes_no_near_text: no checkbox after anchor for {question!r}[/yellow]")
+                return False
+            element.scroll_into_view_if_needed(timeout=1500)
+            try:
+                element.check(timeout=1500)
+            except Exception:
+                element.click(timeout=1500)
+            console.print(f"[green]Clicked {choice} for: {question[:60]}…[/green]")
+            self.page.wait_for_timeout(200)
+            return True
+        except Exception as e:
+            console.print(f"[yellow]_click_yes_no_near_text failed for {question!r}: {e}[/yellow]")
+            return False
+
+    def _check_required_yes_no_questions(self) -> None:
+        """
+        Click any VIDEX 2025 Yes/No question whose default-checked state isn't
+        registered as a form-control interaction. Without this Angular keeps
+        the wrapper ng-invalid and the Continue → Download PDF popup never
+        opens.
+        """
+        # We always apply on behalf of the maid herself, so the answer is
+        # definitively Yes for the "Are you applying for yourself?" question.
+        self._click_yes_no_near_text("Are you applying for yourself?", want_yes=True)
+        # Fingerprints: respect the boolean we received from the caller.
+        ftaken = self.data.get("antragsteller.biometrie.fingerabdrueckeErfassungsDatum_vorhanden")
+        # Fallback to the raw input field if the schema-mapped one is missing.
+        if ftaken is None:
+            ftaken = self.data.get("fingerprints_taken_before")
+        want_yes = bool(ftaken)
+        self._click_yes_no_near_text(
+            "Have your fingerprints been collected previously",
+            want_yes=want_yes,
+        )
 
     @staticmethod
     def _normalize_phone(value: str) -> str:
@@ -726,36 +1007,39 @@ class VidexFormFiller:
             return False
 
     def _fill_checkbox_field(self, field_id: str, value: bool) -> bool:
-        """Fill a checkbox field. Fallback: try by label for assumption-of-costs / means-of-support."""
+        """Fill a checkbox field. Fallback: try by label for VIDEX checkboxes that
+        no longer have stable IDs (the German portal moved many controls into
+        Angular components without `id` attributes around 2025)."""
         selector = self._get_selector(field_id)
         element = self._wait_for_element(selector, timeout=3000)
-        
+
+        # Label-based fallbacks for known label-only checkboxes. Updated to cover
+        # the residence-permit checkbox (now an unlabeled <input type="checkbox">
+        # rendered next to "Is your residence in a country other than that of
+        # your current nationality?") and the assumption-of-costs checkbox.
+        LABEL_FALLBACKS = {
+            "reisedaten.reisekostenUebernahme.antragsteller": "the applicant him/herself",
+            "reisedaten.reisekostenUebernahme.dritte": "a third party",
+            "reisedaten.reisekostenUebernahme.einlader": "the inviting person",
+            "reisedaten.lebensunterhalt.bar": "Cash",
+            "reisedaten.lebensunterhalt.reiseschecks": "Traveller's cheques",
+            "reisedaten.lebensunterhalt.kreditkarten": "Credit cards",
+            "reisedaten.lebensunterhalt.unterkunft": "Accommodation provided",
+            "reisedaten.lebensunterhalt.vollstaendigeKostenuebernahme": "All expenses covered during the stay",
+            "reisedaten.lebensunterhalt.befoerderung": "Pre-paid transport",
+            # VIDEX 2025 layout: this Yes/No question lives in the Contact data
+            # section. The Yes radio/checkbox has no id; we have to find it via
+            # the question text and then click the first Yes input below it.
+            "antragsteller.aufenthaltsberechtigung": (
+                "Is your residence in a country other than that of your current nationality?"
+            ),
+        }
+
         if not element:
-            # Fallback for cost/means checkboxes: VIDEX labels
-            if value and ("reisekostenUebernahme" in field_id or "lebensunterhalt" in field_id):
-                label_map = [
-                    ("reisedaten.reisekostenUebernahme.antragsteller", "the applicant him/herself"),
-                    ("reisedaten.reisekostenUebernahme.dritte", "a third party"),
-                    ("reisedaten.reisekostenUebernahme.einlader", "the inviting person"),
-                    ("reisedaten.lebensunterhalt.bar", "Cash"),
-                    ("reisedaten.lebensunterhalt.reiseschecks", "Traveller's cheques"),
-                    ("reisedaten.lebensunterhalt.kreditkarten", "Credit cards"),
-                    ("reisedaten.lebensunterhalt.unterkunft", "Accommodation paid in advance"),
-                    ("reisedaten.lebensunterhalt.vollstaendigeKostenuebernahme", "Assumption of all expenses"),
-                    ("reisedaten.lebensunterhalt.befoerderung", "Transport paid in advance"),
-                ]
-                for fid, label in label_map:
-                    if fid == field_id:
-                        try:
-                            el = self.page.get_by_label(label, exact=False).first
-                            if el.is_visible(timeout=2000):
-                                el.check()
-                                console.print(f"[green]Checked (by label) {field_id}: {label}[/green]")
-                                self.page.wait_for_timeout(300)
-                                return True
-                        except Exception:
-                            pass
-                        break
+            if value and field_id in LABEL_FALLBACKS:
+                label = LABEL_FALLBACKS[field_id]
+                if self._click_checkbox_near_text(field_id, label):
+                    return True
             if not value:
                 return True
             console.print(f"[yellow]Checkbox not found: {field_id}[/yellow]")
@@ -1113,6 +1397,14 @@ class VidexFormFiller:
                     if len(filled_fields) >= total_to_fill:
                         console.print("[green]All fields filled![/green]")
                     
+                    # VIDEX 2025: a couple of Yes/No questions render as
+                    # un-id'd checkbox pairs whose visual default isn't bound
+                    # to the Angular form-control. Without this the wrapper
+                    # stays ng-invalid and the Continue→Download popup never
+                    # appears (manifests as the generic "PDF generation failed"
+                    # error the user reported after the ZERP-55 redeploy).
+                    self._check_required_yes_no_questions()
+
                     self._take_screenshot("all_sections_filled")
                 
                 # Handle submission
@@ -1131,6 +1423,10 @@ class VidexFormFiller:
                     failed_fields = [k for k, v in results.items() if not v]
                     if failed_fields:
                         console.print(f"[yellow]Failed fields: {failed_fields[:10]}{'...' if len(failed_fields) > 10 else ''}[/yellow]")
+
+                # The post-Continue diagnostic in _save_pdf does the real work
+                # because Angular only marks fields as touched/invalid after
+                # validation runs.
                 
                 # Save PDF only after all fields are filled
                 saved_path = None
@@ -1163,7 +1459,8 @@ class VidexFormFiller:
             "fields": results,
             "pdf_path": self.pdf_path,
             "success_count": sum(1 for v in results.values() if v),
-            "fail_count": len(results) - sum(1 for v in results.values() if v)
+            "fail_count": len(results) - sum(1 for v in results.values() if v),
+            "validation_error": getattr(self, "validation_error", None),
         }
 
     def _submit_form(self) -> None:
@@ -1332,7 +1629,78 @@ class VidexFormFiller:
         # Wait for popup to appear
         self.page.wait_for_timeout(2000)
         self._take_screenshot("after_continue_click")
-        
+
+        # If VIDEX validation rejected the form, surface the failed sections
+        # instead of returning the generic "Download PDF button not found".
+        validation_text = self._extract_validation_modal_text()
+        if validation_text:
+            console.print(f"[bold red]VIDEX validation error: {validation_text}[/bold red]")
+            self.validation_error = validation_text
+            # Capture invalid inputs both with the modal still up and after it
+            # closes — Angular sometimes resets touched/invalid state on close.
+            self._dump_invalid_inputs(label="while-modal-open")
+            try:
+                self.page.locator("[role='dialog']:visible button:has-text('OK')").first.click(timeout=1500)
+                self.page.wait_for_timeout(800)
+            except Exception:
+                pass
+            # After dismissing the modal, VIDEX repaints red borders on the
+            # offending controls. Capture a full-page screenshot so the operator
+            # can see exactly which fields are flagged.
+            self._take_screenshot("after_modal_dismissed_red_borders")
+            self._dump_invalid_inputs(label="after-modal-closed")
+            try:
+                wrappers = self.page.evaluate(
+                    """
+                    () => {
+                      const out = [];
+                      const els = document.querySelectorAll('.ng-invalid');
+                      for (const el of els) {
+                        const tag = el.tagName.toLowerCase();
+                        if (tag === 'form' || tag === 'ng-form') continue;
+                        const lbl = el.querySelector('label, .col-form-label');
+                        const inner = el.querySelector('input,select,textarea');
+                        // Walk up to find the nearest section card / panel and
+                        // grab whatever text precedes this element so we know
+                        // which question it belongs to.
+                        let card = el.closest('app-collapse-card, .card, .panel, fieldset, section');
+                        let cardTitle = null;
+                        if (card) {
+                          const t = card.querySelector('.card-header, .panel-heading, h2, h3, legend');
+                          cardTitle = t ? (t.innerText || '').trim().slice(0, 80) : null;
+                        }
+                        // Surrounding text: walk back through preceding siblings/cousins
+                        let preceding = '';
+                        let scope = el.parentElement;
+                        while (scope && preceding.length < 200) {
+                          const text = (scope.innerText || '').trim();
+                          if (text) { preceding = text.slice(0, 200); break; }
+                          scope = scope.parentElement;
+                        }
+                        out.push({
+                          tag,
+                          card: cardTitle,
+                          label: lbl ? (lbl.innerText || '').trim().slice(0, 80) : null,
+                          inner_id: inner ? inner.id : null,
+                          inner_tag: inner ? inner.tagName.toLowerCase() : null,
+                          inner_value: inner ? (inner.value || '').slice(0, 40) : null,
+                          inner_type: inner ? inner.type : null,
+                          context: preceding.replace(/\\s+/g, ' ').slice(0, 160),
+                        });
+                      }
+                      return out.slice(0, 25);
+                    }
+                    """
+                )
+                console.print(f"[bold yellow]ng-invalid wrappers ({len(wrappers)}):[/bold yellow]")
+                for w in wrappers:
+                    console.print(f"  • card={w['card']!r}")
+                    console.print(f"    label={w['label']!r} inner=<{w['inner_tag']} id={w['inner_id']!r} type={w['inner_type']!r} value={w['inner_value']!r}>")
+                    console.print(f"    context={w['context']!r}")
+            except Exception as e:
+                console.print(f"[red]wrapper dump failed: {e}[/red]")
+            return None
+
         # Step 2: Find and click "Download PDF" button in the popup
         console.print("[cyan]Looking for Download PDF button in popup...[/cyan]")
         self.page.wait_for_timeout(1000)

@@ -98,6 +98,48 @@ def build_translated_data(data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     if family_name and (not merged.get("birth_name") and not merged.get("maiden_name")):
         merged["birth_name"] = family_name
 
+    # GCC fallbacks: VIDEX requires a postal code on the Contact + Reference
+    # address blocks even though Gulf countries don't really use them. Fill an
+    # all-zero placeholder so the field passes Angular's `required` check.
+    _GCC_NO_POSTAL = {
+        "united arab emirates", "uae",
+        "saudi arabia", "ksa",
+        "qatar", "bahrain", "oman", "kuwait",
+    }
+    def _country_is_gcc(value: object) -> bool:
+        return bool(value) and str(value).strip().lower() in _GCC_NO_POSTAL
+
+    for postal_key, country_key in [
+        ("client_postal_code", "client_country"),
+        ("postal_code", "client_country"),
+        ("employer_postal_code", "employer_country"),
+        ("inviter_postal_code", "client_country"),
+    ]:
+        if not str(merged.get(postal_key, "") or "").strip():
+            if _country_is_gcc(merged.get(country_key)):
+                merged[postal_key] = "00000"
+
+    # VIDEX requires "Issued by" on the passport block (separate from "Issuing
+    # state"). Fall back to the issuing country / authority if the caller did
+    # not provide a specific issuing office.
+    if not str(merged.get("passport_issued_by", "") or "").strip():
+        merged["passport_issued_by"] = (
+            merged.get("passport_issuing_authority")
+            or merged.get("passport_issuing_country")
+            or ""
+        )
+
+    # VIDEX flags "Original nationality" (Nationality at birth) as required
+    # even though the label says "if different". Default it to the current
+    # nationality so the validator passes without spurious extra data entry.
+    if not str(merged.get("nationality_at_birth", "") or "").strip():
+        merged["nationality_at_birth"] = (
+            merged.get("birth_nationality")
+            or merged.get("maid_nationality_at_birth")
+            or merged.get("maid_nationality")
+            or ""
+        )
+
     translator = FieldTranslator(defaults_path=None)
     translated_data = translator.translate_data(merged)
 

@@ -24,6 +24,55 @@ _COUNTRIES = frozenset({
 })
 
 
+# Normalize common short / alpha-2 country tokens to the labels VIDEX expects.
+_COUNTRY_NORMALIZE = {
+    "uae": "United Arab Emirates",
+    "ae": "United Arab Emirates",
+    "united arab emirates": "United Arab Emirates",
+    "ksa": "Saudi Arabia",
+    "sa": "Saudi Arabia",
+    "uk": "United Kingdom",
+    "gb": "United Kingdom",
+    "united kingdom": "United Kingdom",
+    "de": "Germany",
+    "deutschland": "Germany",
+    "germany": "Germany",
+    "ph": "Philippines",
+    "philippines": "Philippines",
+    "in": "India",
+    "india": "India",
+    "pk": "Pakistan",
+    "pakistan": "Pakistan",
+    "eg": "Egypt",
+    "egypt": "Egypt",
+    "fr": "France",
+    "france": "France",
+    "es": "Spain",
+    "spain": "Spain",
+    "it": "Italy",
+    "italy": "Italy",
+    "nl": "Netherlands",
+    "netherlands": "Netherlands",
+    "at": "Austria",
+    "austria": "Austria",
+    "om": "Oman",
+    "oman": "Oman",
+    "qa": "Qatar",
+    "qatar": "Qatar",
+    "bh": "Bahrain",
+    "bahrain": "Bahrain",
+    "kw": "Kuwait",
+    "kuwait": "Kuwait",
+}
+
+
+def _normalize_country(value: str) -> str:
+    """Map short codes or lowercase names to the label VIDEX dropdowns use."""
+    if not value:
+        return value
+    return _COUNTRY_NORMALIZE.get(value.strip().lower(), value)
+
+
 def _parse_heuristic(full_address: str) -> Dict[str, str]:
     """
     Rule-based split. No API key. Handles:
@@ -42,14 +91,16 @@ def _parse_heuristic(full_address: str) -> Dict[str, str]:
         out["street"] = s
         return out
 
-    # UAE style: last part is city (Dubai, Abu Dhabi) -> city + country UAE
+    # UAE style: last part is city (Dubai, Abu Dhabi) -> city + country
+    # Emit the full VIDEX-friendly label "United Arab Emirates" rather than the
+    # short "UAE" so the German country dropdown can match it.
     if parts[-1].lower() in _UAE_CITIES:
         out["city"] = parts[-1]
-        out["country"] = "UAE"
+        out["country"] = "United Arab Emirates"
         parts = parts[:-1]
     # Else: last part is country
     elif parts[-1].lower() in _COUNTRIES or len(parts[-1]) <= 3:
-        out["country"] = parts[-1]
+        out["country"] = _normalize_country(parts[-1])
         parts = parts[:-1]
     if not parts:
         return out

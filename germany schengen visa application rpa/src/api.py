@@ -116,12 +116,35 @@ async def fill_form(data: dict[str, Any]):
                 media_type="application/pdf",
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
+        # Read the keys actually returned by VidexFormFiller.fill_form()
+        # (success_count / fail_count / fields), with a fallback to the older
+        # form_runner exception path (successful / failed).
+        success_count = result.get("success_count", result.get("successful", 0))
+        fail_count = result.get("fail_count", result.get("failed", 0))
+        fields_map = result.get("fields") or {}
+        failed_fields = sorted([fid for fid, ok in fields_map.items() if not ok])
+        validation_error = result.get("validation_error")
+        # Pick the most specific stage we can.
+        if validation_error:
+            stage = "videx_validation_error"
+            error_msg = f"VIDEX rejected the form: {validation_error}"
+        elif result.get("error"):
+            stage = "form_filler_exception"
+            error_msg = result["error"]
+        else:
+            # _save_pdf() returned None and there is no validation modal text —
+            # the Continue → Download PDF popup just never appeared.
+            stage = "save_pdf_returned_none"
+            error_msg = "PDF generation failed (Continue → Download PDF popup not captured)"
         raise HTTPException(
             status_code=500,
             detail={
-                "error": result.get("error", "PDF generation failed"),
-                "fields_filled": result.get("successful", 0),
-                "fields_failed": result.get("failed", 0),
+                "error": error_msg,
+                "stage": stage,
+                "fields_filled": success_count,
+                "fields_failed": fail_count,
+                "failed_fields": failed_fields[:50],
+                "validation_error": validation_error,
             },
         )
     except ValueError as e:

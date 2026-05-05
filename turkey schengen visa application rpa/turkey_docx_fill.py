@@ -600,11 +600,7 @@ def _process_paragraph(paragraph, values: Dict[str, str]) -> None:
             continue
         r = paragraph.add_run(text)
         r.bold = _is_substituted
-
-        # Don't force bold on substituted values: it makes filled fields stand
-        # out from the rest of the form (e.g. "62 days" rendered larger/bolder
-        # than its surrounding "Visa is requested for:" text). Inherit normal
-        # weight from the paragraph style.
+ 
         if base_size is not None:
             r.font.size = base_size
         run_font = _font_name_for_run_text(text, base_font)

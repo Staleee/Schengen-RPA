@@ -17,6 +17,7 @@ env/
 # Output files (generated)
 output/*.pdf
 screenshots/
+debug_out/
 
 # Logs
 *.log

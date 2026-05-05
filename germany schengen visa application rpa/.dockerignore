@@ -10,7 +10,12 @@ __pycache__
 venv
 env
 *.md
-output/*.json
+# NOTE: do not exclude output/fields_schema.json — the form filler relies on it
+# at runtime for VIDEX field selectors, types, and select-option mappings.
+# Excluding it caused 8 mandatory fields to silently fail and the PDF popup to
+# never open. Only exclude generated artefacts here, not the committed schema.
+output/applicant_data*.json
+output/sample_data*.json
 screenshots
 *.png
 .env

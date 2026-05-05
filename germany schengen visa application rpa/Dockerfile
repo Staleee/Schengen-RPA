@@ -6,16 +6,15 @@ WORKDIR /app
 
 ENV PIP_DEFAULT_TIMEOUT=300
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0
+# Reuse Chromium that ships in the base image (matches pinned playwright==1.40.0).
+# Re-running `playwright install` here would download a different Chromium for
+# whichever playwright pip resolved, which is what broke VIDEX automation after
+# the ZERP-55 redeploy. Skip it.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
-# Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python deps
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Chromium + system deps (non-interactive for Railway)
-RUN playwright install chromium --with-deps
 
 # Copy application code last
 COPY . .
