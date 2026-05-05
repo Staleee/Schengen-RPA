@@ -33,7 +33,8 @@ def build_translated_data(data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     """
     From raw request body, build merged dict, translate to VIDEX field IDs, validate.
     Returns (translated_data, full_name) for the form filler.
-    Raises ValueError with message if validation fails (e.g. missing client_birth_place).
+    Sparse CRM rows get GCC-friendly placeholders (house "-", postal "00000", PoB text).
+    Date fields are never invented — fix those in the profile when VIDEX rejects them.
     """
     merged = {**HARDCODED_DEFAULTS, **data}
 
@@ -179,15 +180,24 @@ def build_translated_data(data: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         if alt and str(alt).strip():
             merged["client_date_of_birth"] = alt
 
+    # VIDEX treats inviting-person / applicant place-of-birth as mandatory text.
+    # Prefer nationality when the city is unknown (same pattern as GCC house/postal
+    # placeholders); "-" is last resort so we still produce a draft PDF — operators
+    # must replace with real data before embassy submission.
+    if not str(merged.get("client_birth_place", "") or "").strip() and not str(
+        merged.get("inviter_birth_place", "") or ""
+    ).strip():
+        merged["client_birth_place"] = (
+            str(merged.get("client_nationality") or "").strip() or "-"
+        )
+
+    if not str(merged.get("maid_place_of_birth", "") or "").strip():
+        merged["maid_place_of_birth"] = (
+            str(merged.get("maid_nationality") or "").strip() or "-"
+        )
+
     translator = FieldTranslator(defaults_path=None)
     translated_data = translator.translate_data(merged)
-
-    ref_place = (
-        merged.get("client_birth_place") or merged.get("inviter_birth_place")
-        or translated_data.get("referenz.ansprechpartner.geburtsort")
-    )
-    if not ref_place or not str(ref_place).strip():
-        raise ValueError("client_birth_place (or inviter_birth_place) is required for the reference section.")
 
     first_name = merged.get("maid_first_name") or merged.get("first_name") or merged.get("vorname", "applicant")
     surname = merged.get("maid_surname") or merged.get("surname") or merged.get("familienname", "")
