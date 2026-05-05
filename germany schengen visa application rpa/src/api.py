@@ -3,24 +3,36 @@ VIDEX Form Automation API
 Accepts JSON POST requests and returns generated PDF
 """
 
+import base64
+import json
 import os
-import asyncio
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 
 # Add src to path for imports
-import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from prepare_fill import build_translated_data
-from form_runner import run_form_filler
 
 from jobs import enqueue_job, get_job, is_redis_available
+
+# Path to the stand-alone subprocess runner. Running the form filler in a
+# child process avoids the sync_playwright + asyncio event-loop deadlock that
+# bites whenever Playwright's sync API is invoked from inside any thread that
+# uvicorn/Starlette has touched (anyio attaches loop state to its workers).
+SUBPROCESS_RUNNER = Path(__file__).parent / "subprocess_runner.py"
+
+# Hard ceiling for one /fill call. A healthy run finishes in ~85 s; if we
+# exceed this, Chromium is genuinely stuck and we'd rather return a clear
+# 504 than have the upstream caller time out at 5 minutes.
+FILL_TIMEOUT_SECONDS = int(os.environ.get("FILL_TIMEOUT_SECONDS", "180"))
 
 app = FastAPI(
     title="VIDEX Form Automation API",
@@ -30,9 +42,6 @@ app = FastAPI(
 
 # Paths (form_runner has SCHEMA_PATH)
 BASE_DIR = Path(__file__).parent.parent
-
-# Thread pool for running playwright (sync) in async context
-executor = ThreadPoolExecutor(max_workers=2)
 
 
 @app.get("/")
@@ -94,65 +103,131 @@ async def job_status(job_id: str):
     return out
 
 
-@app.post("/fill")
-async def fill_form(data: dict[str, Any]):
+def _run_filler_subprocess(data: dict[str, Any]) -> dict[str, Any]:
     """
-    Fill VIDEX form synchronously and return PDF. May timeout on slow runs; for Zoho use POST /submit + callback_url instead.
+    Spawn `subprocess_runner.py` to drive Playwright in a clean child Python
+    process, then read and return the JSON envelope it wrote to a side file.
+    Raises HTTPException on transport/timeout failures.
     """
+    # Side-channel file: subprocess writes the structured envelope here so it
+    # never collides with rich's chatty stdout from form_filler.
+    fd, envelope_path_str = tempfile.mkstemp(prefix="videx_envelope_", suffix=".json")
+    os.close(fd)
+    envelope_path = Path(envelope_path_str)
     try:
-        translated_data, full_name = build_translated_data(data)
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            executor,
-            run_form_filler,
-            translated_data,
-            full_name,
-        )
-        if result.get("pdf_content"):
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"videx_{full_name}_{timestamp}.pdf"
-            return Response(
-                content=result["pdf_content"],
-                media_type="application/pdf",
-                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(SUBPROCESS_RUNNER), str(envelope_path)],
+                input=json.dumps(data),
+                capture_output=True,
+                text=True,
+                timeout=FILL_TIMEOUT_SECONDS,
             )
-        # Read the keys actually returned by VidexFormFiller.fill_form()
-        # (success_count / fail_count / fields), with a fallback to the older
-        # form_runner exception path (successful / failed).
-        success_count = result.get("success_count", result.get("successful", 0))
-        fail_count = result.get("fail_count", result.get("failed", 0))
-        fields_map = result.get("fields") or {}
-        failed_fields = sorted([fid for fid, ok in fields_map.items() if not ok])
-        validation_error = result.get("validation_error")
-        # Pick the most specific stage we can.
-        if validation_error:
-            stage = "videx_validation_error"
-            error_msg = f"VIDEX rejected the form: {validation_error}"
-        elif result.get("error"):
-            stage = "form_filler_exception"
-            error_msg = result["error"]
-        else:
-            # _save_pdf() returned None and there is no validation modal text —
-            # the Continue → Download PDF popup just never appeared.
-            stage = "save_pdf_returned_none"
-            error_msg = "PDF generation failed (Continue → Download PDF popup not captured)"
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": error_msg,
-                "stage": stage,
-                "fields_filled": success_count,
-                "fields_failed": fail_count,
-                "failed_fields": failed_fields[:50],
-                "validation_error": validation_error,
-            },
-        )
+        except subprocess.TimeoutExpired:
+            raise HTTPException(
+                status_code=504,
+                detail={
+                    "error": (
+                        f"RPA exceeded {FILL_TIMEOUT_SECONDS}s. The Chromium worker "
+                        "is stuck (check container memory, /dev/shm size, and VIDEX "
+                        "reachability). Use POST /submit + callback_url for slow runs."
+                    ),
+                    "stage": "fill_timeout",
+                },
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(
+                status_code=500,
+                detail={"error": f"failed to launch subprocess: {e}", "stage": "subprocess_launch_error"},
+            )
+
+        if not envelope_path.exists() or envelope_path.stat().st_size == 0:
+            stderr_tail = proc.stderr[-2000:] if proc.stderr else ""
+            stdout_tail = proc.stdout[-500:] if proc.stdout else ""
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "subprocess produced no envelope",
+                    "stage": "subprocess_silent",
+                    "stderr_tail": stderr_tail,
+                    "stdout_tail": stdout_tail,
+                    "exit_code": proc.returncode,
+                },
+            )
+
+        try:
+            return json.loads(envelope_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": f"subprocess wrote bad envelope: {e}",
+                    "stage": "subprocess_bad_envelope",
+                    "stderr_tail": proc.stderr[-500:] if proc.stderr else "",
+                },
+            )
+    finally:
+        try:
+            envelope_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+@app.post("/fill")
+def fill_form(data: dict[str, Any]):
+    """
+    Fill VIDEX form synchronously and return the PDF.
+    """
+    # Validate / normalise here so we fail fast (under 1 s) before paying
+    # the cost of spawning the Playwright subprocess.
+    try:
+        _, full_name = build_translated_data(data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+    result = _run_filler_subprocess(data)
+
+    if result.get("pdf_base64"):
+        try:
+            pdf_bytes = base64.b64decode(result["pdf_base64"])
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(
+                status_code=500,
+                detail={"error": f"failed to decode PDF: {e}", "stage": "pdf_decode_error"},
+            )
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"videx_{full_name}_{timestamp}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    success_count = result.get("success_count", 0)
+    fail_count = result.get("fail_count", 0)
+    fields_map = result.get("fields") or {}
+    failed_fields = sorted([fid for fid, ok in fields_map.items() if not ok])
+    validation_error = result.get("validation_error")
+    if validation_error:
+        stage = "videx_validation_error"
+        error_msg = f"VIDEX rejected the form: {validation_error}"
+    elif result.get("error"):
+        stage = "form_filler_exception"
+        error_msg = result["error"]
+    else:
+        stage = "save_pdf_returned_none"
+        error_msg = "PDF generation failed (Continue → Download PDF popup not captured)"
+    raise HTTPException(
+        status_code=500,
+        detail={
+            "error": error_msg,
+            "stage": stage,
+            "fields_filled": success_count,
+            "fields_failed": fail_count,
+            "failed_fields": failed_fields[:50],
+            "validation_error": validation_error,
+        },
+    )
 
 
 if __name__ == "__main__":

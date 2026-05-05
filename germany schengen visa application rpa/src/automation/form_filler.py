@@ -1270,7 +1270,7 @@ class VidexFormFiller:
             self.screenshot_dir.mkdir(parents=True, exist_ok=True)
         
         console.print("[bold blue]Starting VIDEX form automation...[/bold blue]")
-        
+
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=self.headless,
@@ -1283,8 +1283,7 @@ class VidexFormFiller:
                 accept_downloads=True
             )
             self.page = context.new_page()
-            
-            # Set up dialog handler for JavaScript alerts/confirms
+
             self._setup_dialog_handler()
             
             try:
