@@ -90,6 +90,11 @@ _SCHENGEN_WORD_RE = re.compile(r"\bSchengen\b", re.IGNORECASE)
 # "Turkey Turkey" when Turkey is the country. Collapse those duplicates.
 _DUPLICATE_TURKEY_RE = re.compile(r"\bTurkey(?:\s+Turkey)+\b", re.IGNORECASE)
 
+# Spain submits Schengen visas through BLS instead of VFS. The sponsor letter
+# template hard-codes "VFS"; swap it for "BLS" when the destination is Spain.
+# Case-sensitive on purpose to avoid touching unrelated lowercase tokens.
+_VFS_WORD_RE = re.compile(r"\bVFS\b")
+
 
 def _replace_schengen_with_turkey(text: str) -> str:
     """Remove combined 'Schengen Turkey'/'Turkey Schengen' phrases, then replace remaining 'Schengen' with 'Turkey', then collapse any 'Turkey Turkey' duplicates."""
@@ -97,6 +102,11 @@ def _replace_schengen_with_turkey(text: str) -> str:
     text = _SCHENGEN_WORD_RE.sub("Turkey", text)
     text = _DUPLICATE_TURKEY_RE.sub("Turkey", text)
     return text
+
+
+def _replace_vfs_with_bls(text: str) -> str:
+    """Replace standalone 'VFS' tokens with 'BLS' (Spain submission channel)."""
+    return _VFS_WORD_RE.sub("BLS", text)
 
 
 # Match the consulate/embassy phrase + an optional "– <city/country>" tail.
@@ -183,6 +193,8 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
     When variables contain is_turkey=True/true/1, all occurrences of "Schengen" (and the
     combined phrase "Schengen Turkey"/"Turkey Schengen") in the document body are replaced
     with "Turkey" after placeholder substitution.
+    When variables contain is_spain=True/true/1, the sponsor letter's hard-coded "VFS" is
+    rewritten to "BLS" (Spain Schengen visas are submitted through BLS, not VFS).
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -195,8 +207,9 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
     normalized = {normalize_key(k): _sanitize_for_word((str(v) if v is not None else "").strip()) for k, v in variables.items()}
     filled: List[str] = []
 
-    # Determine Turkey mode from the mapped variables.
+    # Determine Turkey / Spain mode from the mapped variables.
     _is_turkey = normalized.get("is_turkey", "").lower() in ("true", "1", "yes")
+    _is_spain = normalized.get("is_spain", "").lower() in ("true", "1", "yes")
 
     def repl(match: re.Match) -> str:
         var_name = normalize_key(match.group(1).strip())
@@ -215,8 +228,9 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
         full_text = "".join(run.text for run in paragraph.runs)
         has_placeholder = "{{" in full_text
         has_schengen = _is_turkey and ("Schengen" in full_text or "schengen" in full_text)
+        has_vfs = _is_spain and "VFS" in full_text
 
-        if not has_placeholder and not has_schengen:
+        if not has_placeholder and not has_schengen and not has_vfs:
             return
 
         if has_placeholder:
@@ -240,6 +254,20 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
             cleaned = _replace_schengen_with_turkey(joined)
             if cleaned != joined:
                 segments = [(cleaned, False)]
+
+        if _is_spain:
+            # Spain uses BLS for Schengen visa submission. The hard-coded "VFS"
+            # in the sponsor letter sits inside a non-bold run, so we only rewrite
+            # the per-segment text and keep the original bold flags intact.
+            new_segments = []
+            changed = False
+            for text, is_bold in segments:
+                rewritten = _replace_vfs_with_bls(text)
+                if rewritten != text:
+                    changed = True
+                new_segments.append((rewritten, is_bold))
+            if changed:
+                segments = new_segments
 
         # Clear and rebuild: one run per segment, bold only for substituted values
         for run in list(paragraph.runs):

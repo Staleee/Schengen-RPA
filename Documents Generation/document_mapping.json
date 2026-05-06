@@ -29,6 +29,7 @@
     "client_phone_number": "{{client_phone_number}}",
     "client_email_address": "{{client_email_address}}",
     "is_turkey": "{{is_turkey}}",
+    "is_spain": "{{is_spain}}",
     "addressee": "{{addressee}}",
     "addressee_body": "{{addressee_body}}",
     "addressee_location": "{{addressee_location}}"
