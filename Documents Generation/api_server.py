@@ -353,14 +353,26 @@ async def merge_application(request: Request):
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="`meta` is not valid JSON")
 
-    file_entries: List[tuple[str, UploadFile]] = []
-    for key, value in form.multi_items() if hasattr(form, "multi_items") else form.items():
+    # Duck-type the upload values instead of isinstance(UploadFile): in some
+    # Starlette / python-multipart combos the file class doesn't pass the
+    # check even though the value behaves like an UploadFile. Whatever it is,
+    # we just need `.read()` to get bytes and `.filename` for type detection.
+    items_iter = form.multi_items() if hasattr(form, "multi_items") else form.items()
+    file_entries: List[tuple[str, Any]] = []
+    debug_keys: List[tuple[str, str]] = []
+    for key, value in items_iter:
+        debug_keys.append((key, type(value).__name__))
         if not key.startswith("file_"):
             continue
-        if isinstance(value, UploadFile):
+        if hasattr(value, "read") and hasattr(value, "filename"):
             file_entries.append((key, value))
     if not file_entries:
-        raise HTTPException(status_code=400, detail="No files provided (expected file_00, file_01, ...)")
+        # Surface what we actually received so the operator can diagnose
+        # multipart issues without redeploying.
+        raise HTTPException(
+            status_code=400,
+            detail=f"No files provided (expected file_00, file_01, ...). Received: {debug_keys}",
+        )
     file_entries.sort(key=lambda kv: kv[0])
 
     log_id = f"merge:{meta.get('applicationId', '?')}:{len(file_entries)}"
