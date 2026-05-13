@@ -10,9 +10,12 @@ import json
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
+from PIL import Image
+from pypdf import PdfReader, PdfWriter
 import uvicorn
 
 from doc_utils import fill_document, list_placeholder_variables, normalize_key
@@ -262,8 +265,148 @@ async def generate_all(
     )
 
 
+# ZERP-127 — Turkey application PDF merge.
+# Single endpoint that converts each incoming attachment (PDF / image / DOCX)
+# to PDF and concatenates them in the order the caller supplied. Keeping all
+# PDF assembly server-side avoids shipping pdf-lib + sharp into the Next.js
+# bundle and reuses the LibreOffice install we already pay for.
+
+PDF_MAGIC = b"%PDF"
+# Pillow handles JPEG / PNG / WebP / GIF / BMP / TIFF natively; HEIC requires
+# `pillow-heif` and is not installed yet. If iPhone HEIC uploads start showing
+# up in production, add the dep and reuse the same branch.
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
+DOCX_EXTS = {".docx", ".doc"}
+MERGE_MAX_BYTES = 50 * 1024 * 1024  # 50 MB guardrail against Railway OOMs
+
+
+def _to_pdf_bytes(filename: str, data: bytes) -> bytes:
+    """Convert one attachment to PDF bytes.
+
+    Order of detection: PDF magic > extension. The PDF magic-byte check covers
+    files that arrived from Supabase Storage without a useful filename
+    extension (the storage path is opaque `{ts}_{label}.pdf` so usually fine,
+    but defensive).
+    """
+    if data.startswith(PDF_MAGIC):
+        return data
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".pdf":
+        # Filename says PDF but magic bytes are wrong — surface clearly so the
+        # operator can re-upload, instead of producing a corrupt merged PDF.
+        raise HTTPException(status_code=415, detail=f"{filename} is not a valid PDF")
+    if suffix in IMAGE_EXTS:
+        try:
+            img = Image.open(io.BytesIO(data))
+            # PDF doesn't support alpha; flatten to RGB on a white background
+            # to avoid black blocks where the alpha channel was.
+            if img.mode in ("RGBA", "LA", "P"):
+                rgb = Image.new("RGB", img.size, (255, 255, 255))
+                rgb.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1])
+                img = rgb
+            else:
+                img = img.convert("RGB")
+            out = io.BytesIO()
+            img.save(out, format="PDF", resolution=150.0)
+            return out.getvalue()
+        except Exception as exc:
+            raise HTTPException(status_code=415, detail=f"Could not render image {filename}: {exc}")
+    if suffix in DOCX_EXTS:
+        tmp_in = BASE_DIR / "output" / f"merge_{uuid4().hex}{suffix}"
+        tmp_in.parent.mkdir(parents=True, exist_ok=True)
+        tmp_in.write_bytes(data)
+        tmp_out = tmp_in.with_suffix(".pdf")
+        pdf_path = docx_to_pdf(tmp_in, tmp_out)
+        if not pdf_path or not pdf_path.exists():
+            raise HTTPException(status_code=500, detail=f"LibreOffice failed to convert {filename}")
+        try:
+            return pdf_path.read_bytes()
+        finally:
+            for tmp in (tmp_in, tmp_out):
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+    raise HTTPException(status_code=415, detail=f"Unsupported file type: {filename}")
+
+
+@app.post("/merge-application")
+async def merge_application(request: Request):
+    """Merge an ordered list of attachments into a single PDF.
+
+    Multipart fields:
+      - `file_00`, `file_01`, ... — attachments in the order they should
+        appear in the output. The numeric suffix is what defines order, not
+        the filename; the caller picks names like `file_07` to enforce a
+        deterministic position.
+      - `meta` — JSON string with `applicationId`, `maid_name`, `country`.
+        Only `maid_name` is used today (for the output filename); the rest
+        is logged so we can correlate Railway logs with the ERP record.
+
+    Returns: `application/pdf` bytes. Errors are 4xx/5xx with a `detail`
+    message that the Next.js caller forwards to the operator's toast.
+    """
+    form = await request.form()
+    meta_raw = form.get("meta")
+    try:
+        meta: Dict[str, Any] = json.loads(meta_raw) if isinstance(meta_raw, str) and meta_raw else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="`meta` is not valid JSON")
+
+    file_entries: List[tuple[str, UploadFile]] = []
+    for key, value in form.multi_items() if hasattr(form, "multi_items") else form.items():
+        if not key.startswith("file_"):
+            continue
+        if isinstance(value, UploadFile):
+            file_entries.append((key, value))
+    if not file_entries:
+        raise HTTPException(status_code=400, detail="No files provided (expected file_00, file_01, ...)")
+    file_entries.sort(key=lambda kv: kv[0])
+
+    log_id = f"merge:{meta.get('applicationId', '?')}:{len(file_entries)}"
+    print(f"[merge-application] -> {log_id} country={meta.get('country')!r} files={[name for name, _ in file_entries]}")
+
+    total_bytes = 0
+    writer = PdfWriter()
+    for key, upload in file_entries:
+        data = await upload.read()
+        total_bytes += len(data)
+        if total_bytes > MERGE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail=f"Combined input exceeds {MERGE_MAX_BYTES // (1024 * 1024)} MB")
+        pdf_bytes = _to_pdf_bytes(upload.filename or key, data)
+        try:
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Could not read PDF produced from {upload.filename or key}: {exc}",
+            )
+        for page in reader.pages:
+            writer.add_page(page)
+
+    out = io.BytesIO()
+    writer.write(out)
+    merged = out.getvalue()
+
+    maid = str(meta.get("maid_name") or "applicant").strip().replace(" ", "_") or "applicant"
+    country = str(meta.get("country") or "Turkey").strip().replace(" ", "_") or "Turkey"
+    filename = f"{maid}_{country}_Application_Package.pdf"
+
+    print(f"[merge-application] <- {log_id} merged_bytes={len(merged)} filename={filename}")
+
+    return Response(
+        content=merged,
+        media_type=PDF_MEDIA,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(merged)),
+            "Cache-Control": "no-transform",
+        },
+    )
+
+
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 8000))
-    print("\nDocuments Generation API – /variables, POST /generate, POST /generate-all\n")
+    print("\nDocuments Generation API – /variables, POST /generate, POST /generate-all, POST /merge-application\n")
     uvicorn.run(app, host="0.0.0.0", port=port)
