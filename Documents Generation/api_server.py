@@ -7,6 +7,7 @@ What gets replaced for which document is defined only in document_mapping.json (
 import base64
 import io
 import json
+import traceback
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -381,20 +382,67 @@ async def merge_application(request: Request):
     total_bytes = 0
     writer = PdfWriter()
     for key, upload in file_entries:
-        data = await upload.read()
-        total_bytes += len(data)
-        if total_bytes > MERGE_MAX_BYTES:
-            raise HTTPException(status_code=413, detail=f"Combined input exceeds {MERGE_MAX_BYTES // (1024 * 1024)} MB")
-        pdf_bytes = _to_pdf_bytes(upload.filename or key, data)
+        # ZERP-70 — every step of per-file processing is wrapped so a bad
+        # source file produces an actionable detail in the response instead
+        # of bubbling up to Starlette as a generic "Internal Server Error".
+        # The most common offenders we've seen so far:
+        #   - password-protected/encrypted PDFs (iOS "Adobe Scan" output,
+        #     some banks' bank-statement PDFs) → pypdf raises
+        #     FileNotDecryptedError when iterating `reader.pages`, NOT at
+        #     PdfReader construction time.
+        #   - Corrupt xrefs from re-saved PDFs → PdfReadError mid-iteration.
+        #   - DOCX uploads where LibreOffice silently dies on Railway.
+        # Without the wrapper these all show up as opaque 500s in the
+        # operator's toast and we can't tell which file is the bad one.
+        filename = upload.filename or key
         try:
-            reader = PdfReader(io.BytesIO(pdf_bytes))
+            data = await upload.read()
+            total_bytes += len(data)
+            if total_bytes > MERGE_MAX_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Combined input exceeds {MERGE_MAX_BYTES // (1024 * 1024)} MB",
+                )
+            pdf_bytes = _to_pdf_bytes(filename, data)
+            try:
+                reader = PdfReader(io.BytesIO(pdf_bytes))
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Could not read PDF produced from {filename}: {exc}",
+                )
+            # Encrypted PDFs only complain when we actually touch a page.
+            # Attempt a no-password decrypt first; if that fails, surface a
+            # specific message so the operator knows to re-upload a flat
+            # (un-encrypted) copy.
+            if getattr(reader, "is_encrypted", False):
+                try:
+                    reader.decrypt("")
+                except Exception:
+                    pass
+                if getattr(reader, "is_encrypted", False):
+                    raise HTTPException(
+                        status_code=415,
+                        detail=(
+                            f"{filename} is password-protected; please re-upload "
+                            "an un-encrypted copy and merge again."
+                        ),
+                    )
+            for page in reader.pages:
+                writer.add_page(page)
+        except HTTPException:
+            raise
         except Exception as exc:
+            # Surface the Python traceback in Railway logs so we can
+            # diagnose new failure modes without redeploying. The response
+            # only carries the short message — full traceback stays
+            # server-side.
+            print(f"[merge-application] !! file={filename!r} crashed: {exc}")
+            traceback.print_exc()
             raise HTTPException(
                 status_code=500,
-                detail=f"Could not read PDF produced from {upload.filename or key}: {exc}",
+                detail=f"Could not process {filename}: {exc.__class__.__name__}: {exc}",
             )
-        for page in reader.pages:
-            writer.add_page(page)
 
     out = io.BytesIO()
     writer.write(out)
