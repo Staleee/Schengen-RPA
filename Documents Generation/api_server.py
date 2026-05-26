@@ -412,15 +412,23 @@ async def merge_application(request: Request):
                     detail=f"Could not read PDF produced from {filename}: {exc}",
                 )
             # Encrypted PDFs only complain when we actually touch a page.
-            # Attempt a no-password decrypt first; if that fails, surface a
-            # specific message so the operator knows to re-upload a flat
-            # (un-encrypted) copy.
+            # Attempt a no-password decrypt first; many "secured" PDFs
+            # (airline tickets, bank statements, scanner output) are readable
+            # without a prompt but still contain a PDF /Encrypt dictionary.
+            # pypdf's `is_encrypted` remains true after successful decrypt, so
+            # the decrypt return value is the source of truth here.
             if getattr(reader, "is_encrypted", False):
                 try:
-                    reader.decrypt("")
-                except Exception:
-                    pass
-                if getattr(reader, "is_encrypted", False):
+                    decrypt_result = reader.decrypt("")
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=415,
+                        detail=(
+                            f"{filename} is encrypted and could not be opened "
+                            f"without a password: {exc}"
+                        ),
+                    )
+                if not decrypt_result:
                     raise HTTPException(
                         status_code=415,
                         detail=(
