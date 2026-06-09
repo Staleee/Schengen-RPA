@@ -38,6 +38,7 @@ TEMPLATES = {
     "invitation": BASE_DIR / "Invitation Letter (Schengen Visa – Domestic Worker_Housemaid).docx",
     "sponsor": BASE_DIR / "Sponsor_letter.docx",
     "cover": BASE_DIR / "Cover_Letter.docx",
+    "noc": BASE_DIR / "noc-travel.docx",
 }
 
 # Single source of truth: for each document type, request_body_key -> template placeholder string.
