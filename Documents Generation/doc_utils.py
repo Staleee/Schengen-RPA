@@ -16,6 +16,11 @@ _INVALID_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff]
 # Placeholder in document text: {{variable_name}}
 _PLACEHOLDER_RE = re.compile(r"\{\{([^}]+)\}\}")
 
+# Substituted placeholder values are normally bold. A few placeholders carry
+# ordinary sentence text (e.g. the NOC "or their family" clause) and must render
+# in the same regular weight as the surrounding words, not bold.
+NON_BOLD_PLACEHOLDERS = {"family_suffix"}
+
 # Per-document variables (snake_case). Zoho will call each endpoint with its own body.
 COVER_LETTER_VARIABLES = [
     "maid_full_name",
@@ -239,7 +244,8 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
             pos = 0
             for m in _PLACEHOLDER_RE.finditer(full_text):
                 segments.append((full_text[pos : m.start()], False))
-                segments.append((repl(m), True))
+                var_name = normalize_key(m.group(1).strip())
+                segments.append((repl(m), var_name not in NON_BOLD_PLACEHOLDERS))
                 pos = m.end()
             segments.append((full_text[pos:], False))
         else:

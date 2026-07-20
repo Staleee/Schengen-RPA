@@ -45,7 +45,9 @@
     "companion_name": "{{companion_name}}",
     "companion_nationality": "{{companion_nationality}}",
     "companion_passport_number": "{{companion_passport_number}}",
-    "visa_type": "{{visa_type}}"
+    "visa_type": "{{visa_type}}",
+    "family_suffix": "{{family_suffix}}",
+    "stay_line": "{{stay_line}}"
   },
   "invitation": {
     "schengen_country": "{{schengen_country}}",
