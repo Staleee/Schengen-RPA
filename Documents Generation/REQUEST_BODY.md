@@ -88,6 +88,18 @@ Slashes or hyphens are fine between parts. This avoids mixing up June 3 vs 3 Jun
 
 ---
 
+## 4. GCC issuing affidavit
+
+**POST /generate-affidavit** — always returns **PDF** (`Content-Type: application/pdf`, filename `gcc_issuing_affidavit.pdf`); `?format=json` works like the other endpoints. There is no `?output=docx` — the template (`AFFIDAVIT-template.pdf`) is already a PDF and is filled in place.
+
+| Request key | Zoho / source |
+|-------------|----------------|
+| `maid_name` | Maid full name |
+| `maid_passport_number` | Maid passport number |
+| `maid_nic_number` | Maid NIC number |
+
+---
+
 ## Template format
 
 In the .docx templates, variables are written as **{{variable_name}}** (e.g. `{{maid_full_name}}`, `{{schengen_country}}`). The API replaces each with the value from the request body for that document.

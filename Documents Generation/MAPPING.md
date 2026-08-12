@@ -61,11 +61,26 @@ The API replaces **only** the placeholders listed there for each document. Reque
 
 ---
 
+## GCC issuing affidavit (`POST /generate-affidavit`)
+
+The affidavit is a **flat PDF** template (`AFFIDAVIT-template.pdf`), filled in place
+(each line holding a placeholder is redacted and re-written with the values). Output
+is always PDF; substituted values render bold like the letters.
+
+| Request body key | Replaced in template |
+|------------------|----------------------|
+| `maid_name` | `{{maid-name}}` |
+| `maid_passport_number` | `{{passport-no}}` |
+| `maid_nic_number` | `{{nic-number}}` |
+
+---
+
 ## API
 
-- **GET /mapping** – Returns the exact key → placeholder mapping (from `document_mapping.json`). Optional `?document_type=cover|sponsor|invitation`.
+- **GET /mapping** – Returns the exact key → placeholder mapping (from `document_mapping.json`). Optional `?document_type=cover|sponsor|invitation|affidavit`.
 - **GET /variables** – Expected request keys per document + placeholders found in each template file.
 - **POST /generate?document_type=...** – Body is a flat object; only keys present in the mapping for that document are used. Others are ignored.
 - **POST /generate-all** – One body; each document is filled using only its own mapping keys.
+- **POST /generate-affidavit** – GCC issuing affidavit PDF from the flat PDF template (`AFFIDAVIT-template.pdf`).
 
 To add or change a field: edit `document_mapping.json` (add `"request_key": "{{placeholder}}` under the right document). No code changes needed for new keys that follow the same pattern.

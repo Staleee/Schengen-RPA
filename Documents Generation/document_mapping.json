@@ -49,6 +49,11 @@
     "family_suffix": "{{family_suffix}}",
     "stay_line": "{{stay_line}}"
   },
+  "affidavit": {
+    "maid_name": "{{maid-name}}",
+    "maid_passport_number": "{{passport-no}}",
+    "maid_nic_number": "{{nic-number}}"
+  },
   "invitation": {
     "schengen_country": "{{schengen_country}}",
     "client_name": "{{client_name}}",

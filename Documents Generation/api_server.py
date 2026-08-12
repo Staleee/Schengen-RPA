@@ -19,6 +19,7 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 import uvicorn
 
+from affidavit_fill import fill_affidavit_pdf, list_affidavit_placeholders
 from doc_utils import fill_document, list_placeholder_variables, normalize_key
 from pdf_convert import docx_to_pdf
 from variable_enrichment import enrich_variables
@@ -40,6 +41,10 @@ TEMPLATES = {
     "cover": BASE_DIR / "Cover_Letter.docx",
     "noc": BASE_DIR / "noc-travel.docx",
 }
+
+# The GCC issuing affidavit is a flat PDF template (no AcroForm fields), filled
+# via search/redact/insert in affidavit_fill.py instead of the .docx flow.
+AFFIDAVIT_TEMPLATE = BASE_DIR / "AFFIDAVIT-template.pdf"
 
 # Single source of truth: for each document type, request_body_key -> template placeholder string.
 # Only these keys are used for each document; no inference, no guessing.
@@ -119,7 +124,7 @@ def get_expected_keys(document_type: Optional[str] = None) -> Dict[str, List[str
     """Expected request body keys per document (from document_mapping.json)."""
     mapping = _load_mapping()
     result = {}
-    for name in TEMPLATES:
+    for name in list(TEMPLATES) + ["affidavit"]:
         if document_type and name != document_type:
             continue
         result[name] = list(mapping.get(name, {}).keys())
@@ -164,6 +169,11 @@ async def get_variables(document_type: Optional[str] = None):
         result[name] = {
             "expected_keys": expected[name],
             "placeholders_in_file": list_placeholder_variables(path) if path.exists() else [],
+        }
+    if "affidavit" in expected:
+        result["affidavit"] = {
+            "expected_keys": expected["affidavit"],
+            "placeholders_in_file": list_affidavit_placeholders(AFFIDAVIT_TEMPLATE) if AFFIDAVIT_TEMPLATE.exists() else [],
         }
     return result
 
@@ -259,6 +269,52 @@ async def generate_all(
     return Response(
         content=content,
         media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(content)),
+            "Cache-Control": "no-transform",
+        },
+    )
+
+
+@app.post("/generate-affidavit")
+async def generate_affidavit(
+    body: Dict[str, Any],
+    format: Optional[str] = None,
+):
+    """
+    Generate the GCC issuing affidavit as **PDF** (always PDF — the template is
+    a flat PDF, there is no .docx variant). Request keys come from
+    document_mapping.json -> "affidavit"; camelCase keys are normalized.
+    Substituted values render in bold, like the letter templates.
+    Use ?format=json for a base64 JSON response (Zoho).
+    """
+    if not AFFIDAVIT_TEMPLATE.exists():
+        raise HTTPException(status_code=500, detail=f"Template not found: {AFFIDAVIT_TEMPLATE.name}")
+    doc_map = _load_mapping().get("affidavit", {})
+    if not doc_map:
+        raise HTTPException(status_code=500, detail='No "affidavit" block in document_mapping.json')
+
+    variables = enrich_variables("affidavit", _variables_for_document(body, "affidavit"), body)
+    # The PDF placeholders use hyphens ({{maid-name}}); resolve each mapped
+    # placeholder literal against its normalized request key.
+    substitutions = {
+        placeholder: variables.get(normalize_key(request_key), "")
+        for request_key, placeholder in doc_map.items()
+    }
+    content = fill_affidavit_pdf(AFFIDAVIT_TEMPLATE, substitutions)
+    filename = "gcc_issuing_affidavit.pdf"
+
+    if format and format.lower() == "json":
+        return {
+            "filename": filename,
+            "content_type": PDF_MEDIA,
+            "content_base64": base64.b64encode(content).decode("ascii"),
+        }
+
+    return Response(
+        content=content,
+        media_type=PDF_MEDIA,
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Length": str(len(content)),
