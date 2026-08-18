@@ -10,7 +10,11 @@ TEXT_MAP = {
     "surname": "1 Surname Family name  Nom nom de famille",
     "given_names": "3 First names Given names  Prénoms Noms usuels",
     "maid_date_of_birth": "4 Date of birth daymonthyear  Date de naissance jourmois année",
-    "place_and_country_of_birth": "5 Place of birth  Lieu de naissance 6 Country of birth  Pays de naissance",
+    # Field 5 (place), 6 (country of birth) and 7 (current nationality) are three separate widgets;
+    # 6 and 7 carry generic names (Text1 / Text2). Keep them split so nothing clips into one cell.
+    "maid_place_of_birth": "5 Place of birth  Lieu de naissance 6 Country of birth  Pays de naissance",
+    "country_of_birth": "Text1",
+    "nationality": "Text2",
     "passport_number": "13 Number of travel docu ment  Numéro du document de voyage",
     "passport_issue_date": "14 Date of issue  Date de délivrance",
     "passport_expiry_date": "15 Valid until  Date dexpiration",
