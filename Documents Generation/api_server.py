@@ -40,11 +40,18 @@ TEMPLATES = {
     "sponsor": BASE_DIR / "Sponsor_letter.docx",
     "cover": BASE_DIR / "Cover_Letter.docx",
     "noc": BASE_DIR / "noc-travel.docx",
+    # Turkey maid NOC — separate template (addressed to the Turkish consulate/embassy, signed by
+    # "HR Manager", NO Aldrin name/stamp/signature). TEMPLATE PENDING: drop in noc-turkey.docx.
+    # /generate returns a clear "Template not found" error until the file is provided.
+    "noc-turkey": BASE_DIR / "noc-turkey.docx",
 }
 
 # The GCC issuing affidavit is a flat PDF template (no AcroForm fields), filled
 # via search/redact/insert in affidavit_fill.py instead of the .docx flow.
 AFFIDAVIT_TEMPLATE = BASE_DIR / "AFFIDAVIT-template.pdf"
+
+# The Turkey client NOC is also a flat {{placeholder}} PDF filled via affidavit_fill.py.
+CLIENT_NOC_TEMPLATE = BASE_DIR / "client-noc-template.pdf"
 
 # Single source of truth: for each document type, request_body_key -> template placeholder string.
 # Only these keys are used for each document; no inference, no guessing.
@@ -198,8 +205,11 @@ async def generate_one(
             status_code=422,
             detail="document_type is required. Add to URL: ?document_type=invitation (or sponsor or cover). Or put in body: \"document_type\": \"invitation\".",
         )
+    # Turkey client NOC is a flat {{placeholder}} PDF (not a .docx), filled via affidavit_fill.
+    if dt == "client-noc":
+        return _generate_client_noc(body, format)
     if dt not in TEMPLATES:
-        raise HTTPException(status_code=400, detail=f"document_type must be one of: {list(TEMPLATES.keys())}")
+        raise HTTPException(status_code=400, detail=f"document_type must be one of: {list(TEMPLATES.keys())} or client-noc")
     path = TEMPLATES[dt]
     if not path.exists():
         raise HTTPException(status_code=500, detail=f"Template not found: {path.name}")
@@ -269,6 +279,44 @@ async def generate_all(
     return Response(
         content=content,
         media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(content)),
+            "Cache-Control": "no-transform",
+        },
+    )
+
+
+def _generate_client_noc(body: Dict[str, Any], format: Optional[str]):
+    """Turkey client NOC — flat {{placeholder}} PDF filled via affidavit_fill.py.
+    Reached via POST /generate?document_type=client-noc (the pro-backend SCHENGEN_CLIENT_NOC URL).
+    Request keys come from document_mapping.json -> "client-noc"; camelCase keys are normalized."""
+    if not CLIENT_NOC_TEMPLATE.exists():
+        raise HTTPException(status_code=500, detail=f"Template not found: {CLIENT_NOC_TEMPLATE.name}")
+    doc_map = _load_mapping().get("client-noc", {})
+    if not doc_map:
+        raise HTTPException(status_code=500, detail='No "client-noc" block in document_mapping.json')
+
+    variables = enrich_variables("client-noc", _variables_for_document(body, "client-noc"), body)
+    # The PDF placeholders use hyphens ({{client-name}}); resolve each mapped placeholder
+    # literal against its normalized request key.
+    substitutions = {
+        placeholder: variables.get(normalize_key(request_key), "")
+        for request_key, placeholder in doc_map.items()
+    }
+    content = fill_affidavit_pdf(CLIENT_NOC_TEMPLATE, substitutions)
+    filename = "client_noc.pdf"
+
+    if format and format.lower() == "json":
+        return {
+            "filename": filename,
+            "content_type": PDF_MEDIA,
+            "content_base64": base64.b64encode(content).decode("ascii"),
+        }
+
+    return Response(
+        content=content,
+        media_type=PDF_MEDIA,
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Content-Length": str(len(content)),

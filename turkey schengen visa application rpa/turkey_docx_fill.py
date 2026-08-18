@@ -208,6 +208,36 @@ def turkey_history_checkboxes(flat: Dict[str, Any]) -> Dict[str, str]:
     return {"24y": y24, "24n": n24, "25y": y25, "25n": n25}
 
 
+def entry_checkboxes(flat: Dict[str, Any]) -> Dict[str, str]:
+    """§22 Number of entries requested → {entry_single}/{entry_double}/{entry_multiple}.
+
+    Driven by `number_of_entries` (Single/Double/Multiple, case-insensitive; tolerates
+    "single entry", "multiple entries", "two", "2"). Previously the template hard-coded a
+    checked box before "Single Entry", so Multiple still showed Single checked.
+    """
+    uchk, chk = _CHECK_OFF, _CHECK_ON
+    raw = str(
+        flat.get("number_of_entries")
+        or flat.get("entries")
+        or flat.get("numberOfEntries")
+        or ""
+    ).strip().lower()
+    if "mult" in raw:
+        single = double = uchk
+        multiple = chk
+    elif "two" in raw or "double" in raw or raw == "2":
+        single = multiple = uchk
+        double = chk
+    else:  # default / "single"
+        single = chk
+        double = multiple = uchk
+    return {
+        "entry_single": single,
+        "entry_double": double,
+        "entry_multiple": multiple,
+    }
+
+
 # Zoho often sends dd.MM.yyyy — try dotted forms first to avoid any ambiguity with slashes.
 _DATE_FORMATS = (
     "%d.%m.%Y",
@@ -467,6 +497,7 @@ def compute_inclusive_stay_days(flat: Dict[str, Any]) -> Optional[int]:
 def build_replacements(flat: Dict[str, Any]) -> Dict[str, str]:
     cb = checkbox_placeholders(flat.get("sex"), flat.get("marital_status"))
     hist = turkey_history_checkboxes(flat)
+    entries = entry_checkboxes(flat)
     days = compute_inclusive_stay_days(flat)
 
     values: Dict[str, str] = {}
@@ -481,6 +512,8 @@ def build_replacements(flat: Dict[str, Any]) -> Dict[str, str]:
         values[ck] = cv
     for hk, hv in hist.items():
         values[hk] = hv
+    for ek, ev in entries.items():
+        values[ek] = ev
 
     # Always override body when dates yield a valid inclusive stay (Zoho often sends stale text).
     if days is not None:

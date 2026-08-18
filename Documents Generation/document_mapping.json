@@ -35,6 +35,7 @@
     "addressee_location": "{{addressee_location}}"
   },
   "noc": {
+    "addressee": "{{addressee}}",
     "maid_name": "{{maid_name}}",
     "maid_passport_number": "{{maid_passport_number}}",
     "maid_nationality": "{{maid_nationality}}",
@@ -49,10 +50,34 @@
     "family_suffix": "{{family_suffix}}",
     "stay_line": "{{stay_line}}"
   },
+  "noc-turkey": {
+    "addressee": "{{addressee}}",
+    "maid_name": "{{maid_name}}",
+    "maid_passport_number": "{{maid_passport_number}}",
+    "maid_nationality": "{{maid_nationality}}",
+    "maid_eid_number": "{{maid_eid_number}}",
+    "maid_profession": "{{maid_profession}}",
+    "destination_country": "{{destination_country}}",
+    "companion_salutation_name": "{{companion_salutation_name}}",
+    "companion_name": "{{companion_name}}",
+    "companion_nationality": "{{companion_nationality}}",
+    "companion_passport_number": "{{companion_passport_number}}",
+    "visa_type": "{{visa_type}}",
+    "signatory_name": "{{signatory_name}}"
+  },
   "affidavit": {
     "maid_name": "{{maid-name}}",
     "maid_passport_number": "{{passport-no}}",
     "maid_nic_number": "{{nic-number}}"
+  },
+  "client-noc": {
+    "client_name": "{{client-name}}",
+    "client_nationality": "{{nationality}}",
+    "client_passport_number": "{{passport-no}}",
+    "client_contact_number": "{{client-no}}",
+    "maid_name": "{{maid-name}}",
+    "maid_nationality": "{{maid-nationality}}",
+    "maid_passport_number": "{{maid-passport-no}}"
   },
   "invitation": {
     "schengen_country": "{{schengen_country}}",

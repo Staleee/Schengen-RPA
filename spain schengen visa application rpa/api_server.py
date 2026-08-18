@@ -25,6 +25,19 @@ import uvicorn
 from pydantic import BaseModel, ConfigDict, Field
 
 from pdf_fill import DEFAULT_TEMPLATE, fill_spain_schengen_pdf
+from multi_country_fill import fill_country_pdf, has_country, supported_countries
+
+# Countries that keep using the dedicated, production-tested Spain filler.
+_SPAIN_ALIASES = {"spain", "espana", "españa"}
+
+
+def _resolve_request_country(payload: Dict[str, Any]) -> str:
+    """Best-effort country detection from the pro-backend payload."""
+    for key in ("country", "schengen_country", "destination_member_state_line", "main_destination"):
+        v = payload.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
 
 logger = logging.getLogger(__name__)
 
@@ -132,14 +145,24 @@ async def fill_pdf(body: FillPdfRequest):
     _record_incoming_fill_pdf_request(full_payload)
 
     structured = _request_to_dict(body)
+    country = _resolve_request_country(structured)
     try:
-        pdf_bytes = fill_spain_schengen_pdf(
-            structured,
-            body.pdf_fields,
-            merge_business_rules=body.use_business_merge,
-        )
+        if country and country.strip().lower() not in _SPAIN_ALIASES and has_country(country):
+            # Additional Schengen countries: per-country template + field map.
+            pdf_bytes = fill_country_pdf(country, structured, body.pdf_fields)
+            filename = f"{country.strip().lower().replace(' ', '_')}_schengen_application_filled.pdf"
+        else:
+            # Default: Spain (production-tested path, unchanged).
+            pdf_bytes = fill_spain_schengen_pdf(
+                structured,
+                body.pdf_fields,
+                merge_business_rules=body.use_business_merge,
+            )
+            filename = "spain_schengen_application_filled.pdf"
     except FileNotFoundError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     if not pdf_bytes.startswith(b"%PDF"):
         raise HTTPException(status_code=500, detail="Output is not valid PDF")
@@ -147,7 +170,7 @@ async def fill_pdf(body: FillPdfRequest):
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": 'attachment; filename="spain_schengen_application_filled.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

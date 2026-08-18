@@ -4,6 +4,7 @@ Form Filler - Automates filling the VIDEX visa application form.
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Optional
 from datetime import datetime
@@ -522,19 +523,32 @@ class VidexFormFiller:
         return s
 
     def _normalize_date_value(self, value: str) -> str:
-        """Normalize date to dd.mm.yyyy for VIDEX."""
+        """Normalize a date to VIDEX's dd.mm.yyyy. Accepts dotted, dashed and slashed
+        day/month/year forms plus ISO yyyy-mm-dd; anything unrecognised passes through."""
         if not value or not isinstance(value, str):
             return str(value) if value else ""
         s = value.strip()
         # Already dd.mm.yyyy
         if len(s) == 10 and s[2] == "." and s[5] == ".":
             return s
-        # yyyy-mm-dd -> dd.mm.yyyy
-        if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        # ISO / year-first: yyyy-mm-dd, yyyy/mm/dd, yyyy.mm.dd
+        if len(s) >= 10 and s[4] in "-/." and s[7] in "-/.":
             try:
-                y, m, d = s[:4], s[5:7], s[8:10]
-                return f"{d}.{m}.{y}"
-            except Exception:
+                y, m, d = int(s[:4]), int(s[5:7]), int(s[8:10])
+                if y > 1900:
+                    return f"{d:02d}.{m:02d}.{y:04d}"
+            except (ValueError, IndexError):
+                pass
+        # Day-first with slashes or dashes: dd/mm/yyyy, dd-mm-yyyy, dd.mm.yy(yy)
+        parts = re.split(r"[./\-]", s)
+        if len(parts) == 3 and all(p.isdigit() for p in parts):
+            try:
+                d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                if y < 100:  # two-digit year
+                    y += 2000
+                if 1 <= d <= 31 and 1 <= m <= 12 and y > 1900:
+                    return f"{d:02d}.{m:02d}.{y:04d}"
+            except (ValueError, IndexError):
                 pass
         return s
 

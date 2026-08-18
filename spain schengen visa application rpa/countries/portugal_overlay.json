@@ -1,0 +1,364 @@
+{
+ "surname": {
+  "page": 1,
+  "rect": [
+   182.5,
+   341.4,
+   429.5,
+   355.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "maid_surname_at_birth": {
+  "page": 1,
+  "rect": [
+   250.7,
+   371.6,
+   429.5,
+   385.3
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "given_names": {
+  "page": 1,
+  "rect": [
+   201.6,
+   400.1,
+   429.5,
+   413.7
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "maid_date_of_birth": {
+  "page": 1,
+  "rect": [
+   87.4,
+   453.1,
+   153.9,
+   466.1
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "maid_place_of_birth": {
+  "page": 1,
+  "rect": [
+   240.4,
+   428.3,
+   314.5,
+   441.9
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "country_of_birth": {
+  "page": 1,
+  "rect": [
+   254.1,
+   470.5,
+   314.5,
+   484.2
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "nationality": {
+  "page": 1,
+  "rect": [
+   324.5,
+   442.4,
+   429.5,
+   455.4
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "passport_number": {
+  "page": 2,
+  "rect": [
+   87.4,
+   160.6,
+   153.9,
+   173.6
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "passport_issue_date": {
+  "page": 2,
+  "rect": [
+   163.9,
+   149.9,
+   245.7,
+   162.9
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "passport_expiry_date": {
+  "page": 2,
+  "rect": [
+   255.7,
+   149.9,
+   337.6,
+   162.9
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "passport_issuing_country": {
+  "page": 2,
+  "rect": [
+   347.6,
+   160.6,
+   429.5,
+   173.6
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "applicant_address_email": {
+  "page": 2,
+  "rect": [
+   129.6,
+   389.6,
+   337.6,
+   408.0
+  ],
+  "align": "left",
+  "valign": "top",
+  "fontsize": 8.5,
+  "min_fontsize": 6.0,
+  "multiline": true
+ },
+ "occupation": {
+  "page": 2,
+  "rect": [
+   172.7,
+   468.4,
+   429.5,
+   482.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "employer_sponsor_address": {
+  "page": 2,
+  "rect": [
+   92.9,
+   527.6,
+   429.5,
+   546.0
+  ],
+  "align": "left",
+  "valign": "top",
+  "fontsize": 8.5,
+  "min_fontsize": 6.0,
+  "multiline": true
+ },
+ "purpose_additional_info": {
+  "page": 2,
+  "rect": [
+   87.4,
+   619.6,
+   429.5,
+   638.0
+  ],
+  "align": "left",
+  "valign": "top",
+  "fontsize": 8.5,
+  "min_fontsize": 6.0,
+  "multiline": true
+ },
+ "destination_member_states_line": {
+  "page": 2,
+  "rect": [
+   87.4,
+   680.8,
+   245.7,
+   693.6
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "first_entry_member_state": {
+  "page": 2,
+  "rect": [
+   255.7,
+   655.9,
+   429.5,
+   668.9
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "arrival_date": {
+  "page": 2,
+  "rect": [
+   87.4,
+   771.6,
+   429.5,
+   784.6
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "departure_date": {
+  "page": 3,
+  "rect": [
+   89.2,
+   79.0,
+   429.5,
+   92.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
+ "partner_name": {
+  "page": 3,
+  "rect": [
+   209.7,
+   221.3,
+   429.3,
+   242.4
+  ],
+  "align": "left",
+  "valign": "top",
+  "fontsize": 8.5,
+  "min_fontsize": 6.0,
+  "multiline": true
+ },
+ "partner_address_email": {
+  "page": 3,
+  "rect": [
+   118.2,
+   270.0,
+   245.6,
+   291.2
+  ],
+  "align": "left",
+  "valign": "top",
+  "fontsize": 8.5,
+  "min_fontsize": 6.0,
+  "multiline": true
+ },
+ "sex_male": {
+  "page": 1,
+  "check": true,
+  "box": [
+   68.5,
+   523.2,
+   75.5,
+   530.2
+  ]
+ },
+ "sex_female": {
+  "page": 1,
+  "check": true,
+  "box": [
+   68.5,
+   533.9,
+   75.5,
+   540.9
+  ]
+ },
+ "marital_status_single": {
+  "page": 1,
+  "check": true,
+  "box": [
+   165.7,
+   523.3,
+   172.7,
+   530.3
+  ]
+ },
+ "marital_status_married": {
+  "page": 1,
+  "check": true,
+  "box": [
+   196.5,
+   523.2,
+   203.5,
+   530.2
+  ]
+ },
+ "travel_doc_ordinary_passport": {
+  "page": 2,
+  "check": true,
+  "box": [
+   68.5,
+   82.1,
+   75.5,
+   89.1
+  ]
+ },
+ "purpose_tourism": {
+  "page": 2,
+  "check": true,
+  "box": [
+   68.5,
+   563.3,
+   75.5,
+   570.3
+  ]
+ },
+ "entries_one": {
+  "page": 2,
+  "check": true,
+  "box": [
+   68.5,
+   711.8,
+   75.5,
+   718.8
+  ]
+ },
+ "entries_two": {
+  "page": 2,
+  "check": true,
+  "box": [
+   121.5,
+   711.4,
+   128.5,
+   718.4
+  ]
+ },
+ "entries_multiple": {
+  "page": 2,
+  "check": true,
+  "box": [
+   176.6,
+   711.4,
+   183.6,
+   718.4
+  ]
+ },
+ "all_expenses_covered_during_stay": {
+  "page": 3,
+  "check": true,
+  "box": [
+   257.5,
+   518.9,
+   264.5,
+   525.9
+  ]
+ }
+}
