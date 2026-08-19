@@ -102,6 +102,42 @@ def _country_name(value: Any) -> str:
     return _DEMONYM_OR_ALIAS_TO_COUNTRY.get(raw.lower(), raw)
 
 
+def _labelled_accommodation_lines(raw: Any) -> list[str]:
+    """Parse the ``accommodation_addresses`` JSON array into labelled lines.
+
+    Each entry is ``{country, street, houseNumber, city, postalCode}``; it renders as
+    ``"Country: Street House, PostalCode City"`` (country as a label prefix, not repeated).
+    Malformed input yields an empty list; blank entries are skipped.
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    try:
+        import json as _json
+
+        parsed = _json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    lines: list[str] = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        country = str(item.get("country") or "").strip()
+        street = " ".join(
+            x for x in (str(item.get("street") or "").strip(), str(item.get("houseNumber") or "").strip()) if x
+        )
+        cityline = " ".join(
+            x for x in (str(item.get("postalCode") or "").strip(), str(item.get("city") or "").strip()) if x
+        )
+        body = ", ".join(p for p in (street, cityline) if p)
+        if country and body:
+            lines.append(f"{country}: {body}")
+        elif body or country:
+            lines.append(body or country)
+    return lines
+
+
 def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Generic merge: pass through every body key, then add canonical conveniences shared by
     all countries (sex / entries / schengen-before checkboxes, country-of-birth, composed
@@ -154,6 +190,18 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
         parts = [p for p in (street, cityline, _nonempty(b.get("hotel_country"))) if p]
         if parts:
             out["hotel_address"] = ", ".join(parts)
+
+    # §30 accommodation — when the trip has more than one accommodation address, list every one
+    # (each on its own line, prefixed with the destination country it belongs to) instead of only
+    # the primary. The §30 address widget is multi-line, so the newlines render as separate lines.
+    acc_lines = _labelled_accommodation_lines(b.get("accommodation_addresses"))
+    if len(acc_lines) > 1:
+        block = "\n".join(acc_lines)
+        # Update b too: the §30 host/accommodation block below reads client_/companion_hotel_address
+        # from the raw body, so the full list must be visible there as well as in out.
+        for key in ("hotel_address", "client_hotel_address", "companion_hotel_address"):
+            b[key] = block
+            out[key] = block
 
     # Marital status checkboxes
     marital = str(b.get("marital_status", "")).strip().lower()
@@ -305,7 +353,16 @@ def _fill_template(template: Path, updates: Dict[str, str], clear_existing: bool
                     elif w.field_type == rb:
                         continue  # handled after the loop
                     else:
-                        w.field_value = str(val)
+                        sval = str(val)
+                        # A multi-line value (e.g. several accommodation addresses, one per
+                        # destination) only renders as separate lines when the widget's multiline
+                        # flag is set; many template text boxes are single-line, so enable it on demand.
+                        if "\n" in sval:
+                            try:
+                                w.field_flags = (w.field_flags or 0) | 4096
+                            except Exception:
+                                pass
+                        w.field_value = sval
                     w.update()
         # Radio groups: select the widget whose on-state matches the desired value.
         # on_state() may carry PDF name encoding (#20 = space, #28/#29 = parens); decode to compare.

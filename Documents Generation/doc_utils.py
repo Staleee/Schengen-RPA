@@ -275,14 +275,20 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
             if changed:
                 segments = new_segments
 
-        # Clear and rebuild: one run per segment, bold only for substituted values
+        # Clear and rebuild: one run per segment, bold only for substituted values.
+        # Explicit newlines inside a substituted value (e.g. a multi-line accommodation
+        # list) become real Word line breaks — a literal "\n" in a run is otherwise ignored.
         for run in list(paragraph.runs):
             run._r.getparent().remove(run._r)
         for text, is_bold in segments:
             if not text:
                 continue
-            r = paragraph.add_run(text)
-            r.bold = is_bold
+            for idx, part in enumerate(text.split("\n")):
+                if idx > 0:
+                    paragraph.add_run().add_break()
+                if part:
+                    r = paragraph.add_run(part)
+                    r.bold = is_bold
 
     def process_block(paragraphs, tables=None):
         for p in paragraphs:
