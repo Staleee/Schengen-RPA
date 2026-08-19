@@ -176,8 +176,26 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
         out["purpose_additional_info"] = DEFAULT_PURPOSE_24
     if "first_entry_member_state" not in out:
         out["first_entry_member_state"] = "Spain"
-    if "destination_member_state_line" not in out:
-        out["destination_member_state_line"] = "Spain"
+    # §25 destination(s): primary + any additional destination countries, so multi-country
+    # itineraries are reflected on the Spain form (not just the main destination).
+    main_dest = (
+        _nonempty_str(b.get("main_destination"))
+        or _nonempty_str(b.get("destination_member_state_line"))
+        or "Spain"
+    )
+    extras: list = []
+    dc = b.get("destination_countries")
+    if isinstance(dc, str) and dc.strip():
+        try:
+            import json as _json
+
+            parsed = _json.loads(dc)
+            if isinstance(parsed, list):
+                extras = [str(x).strip() for x in parsed if str(x).strip()]
+        except Exception:
+            extras = []
+    dests = [main_dest] + [e for e in extras if e.lower() != main_dest.lower()]
+    out["destination_member_state_line"] = ", ".join(dests)
 
     # Passport dates/country → Texto11–13 only (not Válido desde / I3astaUntil)
     if b.get("maid_phone"):

@@ -65,6 +65,27 @@
     "visa_type": "{{visa_type}}",
     "signatory_name": "{{signatory_name}}"
   },
+  "noc-schengen": {
+    "date_issued": "date_issued",
+    "consulate_full_name": "consulate_full_name",
+    "worker_name": "worker_name",
+    "destination_country": "destination_country",
+    "companion_name": "companion_name",
+    "companion_passport": "companion_passport",
+    "companion_eid": "companion_eid",
+    "worker_nationality": "worker_nationality",
+    "worker_passport": "worker_passport",
+    "worker_eid": "worker_eid",
+    "employment_start_date": "employment_start_date",
+    "visa_expiry_date": "visa_expiry_date",
+    "employer_name": "employer_name",
+    "employment_basis": "employment_basis",
+    "monthly_salary": "monthly_salary",
+    "annual_salary": "annual_salary",
+    "trip_purpose": "trip_purpose",
+    "travel_start_date": "travel_start_date",
+    "travel_end_date": "travel_end_date"
+  },
   "affidavit": {
     "maid_name": "{{maid-name}}",
     "maid_passport_number": "{{passport-no}}",
@@ -81,6 +102,7 @@
   },
   "invitation": {
     "schengen_country": "{{schengen_country}}",
+    "destinations": "{{destinations}}",
     "client_name": "{{client_name}}",
     "client_passport_number": "{{client_passport_number}}",
     "client_address_in_uae": "{{client_address_in_uae}}",
