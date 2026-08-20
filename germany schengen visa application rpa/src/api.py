@@ -31,8 +31,9 @@ SUBPROCESS_RUNNER = Path(__file__).parent / "subprocess_runner.py"
 
 # Hard ceiling for one /fill call. A healthy run finishes in ~85 s; if we
 # exceed this, Chromium is genuinely stuck and we'd rather return a clear
-# 504 than have the upstream caller time out at 5 minutes.
-FILL_TIMEOUT_SECONDS = int(os.environ.get("FILL_TIMEOUT_SECONDS", "180"))
+# 504 than have the upstream caller hang. The ERP calls /fill from a
+# background task with no read timeout, so this is the only cap that matters.
+FILL_TIMEOUT_SECONDS = int(os.environ.get("FILL_TIMEOUT_SECONDS", "300"))
 
 app = FastAPI(
     title="VIDEX Form Automation API",

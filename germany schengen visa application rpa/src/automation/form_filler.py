@@ -1294,15 +1294,21 @@ class VidexFormFiller:
                 headless=self.headless,
                 slow_mo=self.slow_mo,
                 downloads_path=str(self.output_dir),
-                # Container-hardening flags. Railway/Docker give Chromium a tiny (~64MB)
-                # /dev/shm; without --disable-dev-shm-usage the renderer exhausts it,
+                # Container-hardening flags for Railway/Docker, where Chromium runs as
+                # root with a tiny (~64MB) /dev/shm and constrained memory/CPU. Without
+                # these the renderer exhausts /dev/shm or gets background-throttled,
                 # stalls, and the RPA's 180s cap returns HTTP 504 ("Chromium worker is
-                # stuck"). --no-sandbox is required when running as root in the image;
-                # --disable-gpu is a no-op saver in headless.
+                # stuck"). All are safe for an Angular SPA like VIDEX.
                 args=[
-                    "--disable-dev-shm-usage",
-                    "--no-sandbox",
+                    "--disable-dev-shm-usage",           # use /tmp, not the 64MB /dev/shm
+                    "--no-sandbox",                       # required running as root in-image
+                    "--disable-setuid-sandbox",
                     "--disable-gpu",
+                    "--disable-extensions",
+                    "--disable-background-timer-throttling",
+                    "--disable-backgrounding-occluded-windows",
+                    "--disable-renderer-backgrounding",   # keep the SPA at full speed headless
+                    "--disable-features=TranslateUI",
                 ],
             )
             context = browser.new_context(
