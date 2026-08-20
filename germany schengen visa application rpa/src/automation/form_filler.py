@@ -1293,7 +1293,17 @@ class VidexFormFiller:
             browser = p.chromium.launch(
                 headless=self.headless,
                 slow_mo=self.slow_mo,
-                downloads_path=str(self.output_dir)
+                downloads_path=str(self.output_dir),
+                # Container-hardening flags. Railway/Docker give Chromium a tiny (~64MB)
+                # /dev/shm; without --disable-dev-shm-usage the renderer exhausts it,
+                # stalls, and the RPA's 180s cap returns HTTP 504 ("Chromium worker is
+                # stuck"). --no-sandbox is required when running as root in the image;
+                # --disable-gpu is a no-op saver in headless.
+                args=[
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                    "--disable-gpu",
+                ],
             )
             context = browser.new_context(
                 viewport={"width": 1920, "height": 1080},
