@@ -12,6 +12,7 @@ The API replaces **only** the placeholders listed there for each document. Reque
 | `maid_full_name` | `{{maid_full_name}}` |
 | `maid_passport_number` | `{{maid_passport_number}}` |
 | `schengen_country` | `{{schengen_country}}` |
+| `destinations` | `{{destinations}}` |
 | `departure_date` | `{{departure_date}}` |
 | `return_date` | `{{return_date}}` |
 | `client_name` | `{{client_name}}` |
@@ -33,6 +34,7 @@ The API replaces **only** the placeholders listed there for each document. Reque
 | `contract_start_date` | `{{contract_start_date}}` |
 | `salary_in_letters` | `{{salary_in_letters}}` |
 | `schengen_country` | `{{schengen_country}}` |
+| `destinations` | `{{destinations}}` |
 | `trip_duration` | `{{trip_duration}}` |
 | `departure_date` | `{{departure_date}}` |
 | `return_date` | `{{return_date}}` |

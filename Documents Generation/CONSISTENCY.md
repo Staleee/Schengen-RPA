@@ -33,8 +33,8 @@ Defined in **doc_utils.py** and **REQUEST_BODY.md**:
 
 | Document   | Expected keys |
 |-----------|----------------|
-| **cover** | maid_full_name, maid_passport_number, schengen_country, departure_date, return_date, client_name, client_passport_number, employment_start_date |
-| **sponsor** | client_name, passport_number, full_address_uae, maid_full_name, maid_passport_number, employment_start_date, salary_in_letters, schengen_country, departure_date, return_date, phone_number, email |
+| **cover** | maid_full_name, maid_passport_number, schengen_country, destinations, departure_date, return_date, client_name, client_passport_number, employment_start_date |
+| **sponsor** | client_name, passport_number, full_address_uae, maid_full_name, maid_passport_number, employment_start_date, salary_in_letters, schengen_country, destinations, departure_date, return_date, phone_number, email |
 | **invitation** | destination, client_name, address_in_uae, maid_name, contract_start_date, arrival_date_to_departure_date, cities, hotel_address, phone_number, email_address |
 
 These must appear **exactly** as `{{key}}` in the corresponding .docx (e.g. `{{maid_full_name}}`, not `{{ maid_full_name }}` and not split across runs).

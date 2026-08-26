@@ -45,8 +45,8 @@ uvicorn api_server:app --reload --port 8000
 
 Each document has its own set of keys. See **REQUEST_BODY.md** for the full list and Zoho mapping. Examples in **samples/**.
 
-- **Cover:** `maid_full_name`, `maid_passport_number`, `schengen_country`, `departure_date`, `return_date`, `client_name`, `client_passport_number`, `employment_start_date`
-- **Sponsor:** `client_name`, `passport_number`, `full_address_uae`, `maid_full_name`, `maid_passport_number`, `employment_start_date`, `salary_in_letters`, `schengen_country`, `departure_date`, `return_date`, `phone_number`, `email`
+- **Cover:** `maid_full_name`, `maid_passport_number`, `schengen_country`, `destinations`, `departure_date`, `return_date`, `client_name`, `client_passport_number`, `employment_start_date`
+- **Sponsor:** `client_name`, `passport_number`, `full_address_uae`, `maid_full_name`, `maid_passport_number`, `employment_start_date`, `salary_in_letters`, `schengen_country`, `destinations`, `departure_date`, `return_date`, `phone_number`, `email`
 - **Invitation:** `destination`, `client_name`, `address_in_uae`, `maid_name`, `contract_start_date`, `arrival_date_to_departure_date`, `cities`, `hotel_address`, `phone_number`, `email_address`
 
 ---

@@ -36,6 +36,7 @@ Slashes or hyphens are fine between parts. This avoids mixing up June 3 vs 3 Jun
 | `maid_full_name` | Maid full name |
 | `maid_passport_number` | Maid passport number |
 | `schengen_country` | Germany / France (Schengen country from Zoho) |
+| `destinations` | All trip destinations joined for the travel sentence, e.g. `Spain and France` (falls back to `schengen_country` when empty) |
 | `departure_date` | Departure date |
 | `return_date` | Return date |
 | `client_name` | Client name |
@@ -58,6 +59,7 @@ Slashes or hyphens are fine between parts. This avoids mixing up June 3 vs 3 Jun
 | `contract_start_date` | Contract / employment start date |
 | `salary_in_letters` | Salary in letters (or numeric → auto words; AED is in template) |
 | `schengen_country` | Germany / France (Schengen country from Zoho) |
+| `destinations` | All trip destinations joined for the travel sentence, e.g. `Spain and France` (falls back to `schengen_country` when empty) |
 | `trip_duration` | Ignored when both dates parse; server sets from `departure_date` + `return_date` (inclusive days) |
 | `departure_date` | Departure date — use **YYYY/MM/DD** from Zoho (year first) |
 | `return_date` | Return date — same format |

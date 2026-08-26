@@ -172,4 +172,11 @@ def enrich_variables(
             # storing just the number prevents the "X days days" duplication.
             out["trip_duration"] = str(days)
 
+    # Cover/sponsor: {{destinations}} lists every trip country ("Spain and France").
+    # Callers that predate the key (or single-destination trips) fall back to the
+    # one application country so the travel sentence never renders empty.
+    if document_type in ("cover", "sponsor"):
+        if not (out.get("destinations") or "").strip():
+            out["destinations"] = (out.get("schengen_country") or "").strip()
+
     return out
