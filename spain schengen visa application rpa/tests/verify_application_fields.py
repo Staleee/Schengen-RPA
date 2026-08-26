@@ -103,6 +103,16 @@ COMPLETE: Dict[str, object] = {
 }
 
 # What an incomplete maid profile looks like: the four reported fields have no source value.
+# An unknown gender must still tick a box: every applicant here is a housemaid and the templates
+# are written for one, so §8 defaults to female rather than printing blank.
+SEX_DEFAULT_CASES = (
+    ("gender absent", {}, "MujerFemale"),
+    ("gender = Female", {"maid_gender": "Female"}, "MujerFemale"),
+    ("gender = F", {"maid_gender": "F"}, "MujerFemale"),
+    ("gender = Male", {"maid_gender": "Male"}, "VarónMale"),
+    ("gender = M", {"maid_gender": "M"}, "VarónMale"),
+)
+
 PROFILE_GAPS = (
     "maid_gender", "sex_male", "sex_female",
     "marital_status", "marital_status_single", "marital_status_married",
@@ -219,7 +229,9 @@ def main() -> int:
     from spain_merge import merge_spain_schengen_body
 
     reported = missing_required_fields(merge_spain_schengen_body(thin))
-    for expected in ("5 place of birth", "8 sex", "9 marital status", "14 date of issue"):
+    # §8 sex is deliberately absent: it defaults to female rather than printing blank, so it can
+    # never be one of the reported gaps.
+    for expected in ("5 place of birth", "9 marital status", "14 date of issue"):
         ok = expected in reported
         failures += 0 if ok else 1
         print("  %-4s reported blank: %-28s %s" % ("ok" if ok else "FAIL", expected,
@@ -243,6 +255,20 @@ def main() -> int:
         ok = ticked == [field]
         failures += 0 if ok else 1
         print("  %-4s %-12s -> %-10s %s" % ("ok" if ok else "FAIL", status, field,
+                                            "" if ok else f"ticked={ticked}"))
+
+    # --- §8 sex: never blank, and an explicit male still wins ---------------------------
+    print("\nsex (defaults to female when unknown)")
+    for label, override, expected_box in SEX_DEFAULT_CASES:
+        payload = {k: v for k, v in COMPLETE.items() if k != "maid_gender"}
+        payload.update(override)
+        pdf4 = OUT_DIR / ("application-sex-" + label.replace(" ", "-").replace("=", "") + ".pdf")
+        pdf4.write_bytes(_fill(payload))
+        vals4 = _values(pdf4)
+        ticked = [b for b in ("MujerFemale", "VarónMale") if vals4.get(b) in (True, "On", "/On")]
+        ok = ticked == [expected_box]
+        failures += 0 if ok else 1
+        print("  %-4s %-16s -> %-12s %s" % ("ok" if ok else "FAIL", label, expected_box,
                                             "" if ok else f"ticked={ticked}"))
 
     # --- field 20's mark has to be visible, not merely set ------------------------------

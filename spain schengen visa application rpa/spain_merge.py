@@ -169,14 +169,19 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     if addr or em:
         out["maid_address_email_combined"] = "\n".join(x for x in (addr, em) if x)
 
-    if "maid_gender" in b:
-        g = str(b["maid_gender"]).strip().lower()
-        if g in ("f", "female", "mujer", "filipina"):
-            out["sex_female"] = True
-            out["sex_male"] = False
-        elif g in ("m", "male", "varón", "varon"):
-            out["sex_male"] = True
-            out["sex_female"] = False
+    g = str(b.get("maid_gender", "")).strip().lower()
+    if g in ("f", "female", "mujer", "filipina"):
+        out["sex_female"] = True
+        out["sex_male"] = False
+    elif g in ("m", "male", "varón", "varon"):
+        out["sex_male"] = True
+        out["sex_female"] = False
+    elif not _truthy(b.get("sex_male")) and not _truthy(b.get("sex_female")):
+        # §8 has to have a box ticked. Every applicant on this flow is a housemaid and the
+        # templates are already written for one, so an unknown gender defaults to female rather
+        # than leaving the field blank. An explicit sex_male from the caller still wins.
+        out["sex_female"] = True
+        out["sex_male"] = False
 
     if "travel_doc_ordinary_passport" in b:
         out["travel_doc_ordinary_passport"] = _truthy(b["travel_doc_ordinary_passport"])

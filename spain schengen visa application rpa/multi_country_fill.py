@@ -152,6 +152,11 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
         out["sex_female"], out["sex_male"] = True, False
     elif g in ("m", "male", "varon", "varón"):
         out["sex_male"], out["sex_female"] = True, False
+    elif not _truthy(b.get("sex_male")) and not _truthy(b.get("sex_female")):
+        # The sex box has to be ticked. Every applicant on this flow is a housemaid and the
+        # templates are already written for one, so an unknown gender defaults to female rather
+        # than leaving the field blank. An explicit sex_male from the caller still wins.
+        out["sex_female"], out["sex_male"] = True, False
 
     # Country of birth from nationality (demonym -> country)
     nat = _nonempty(b.get("nationality"))

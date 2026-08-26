@@ -170,8 +170,19 @@ def _truthy(v: Any) -> bool:
 # values cannot be defaulted here (nobody should be inventing a marital status on a visa form).
 REQUIRED_FOR_SUBMISSION: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("5 place of birth", ("maid_place_of_birth",)),
-    ("8 sex", ("sex_male", "sex_female")),
-    ("9 marital status", ("marital_status_single", "marital_status_married")),
+    # §8 sex is not listed: it defaults to female for an unknown gender (see spain_merge), so it
+    # can no longer come out blank and a check for it would never fire.
+    (
+        "9 marital status",
+        (
+            "marital_status_single",
+            "marital_status_married",
+            "marital_status_divorced",
+            "marital_status_widowed",
+            "marital_status_separated",
+            "marital_status_registered_union",
+        ),
+    ),
     ("13 travel document number", ("passport_number",)),
     ("14 date of issue", ("passport_issue_date",)),
     ("15 valid until", ("passport_expiry_date",)),
