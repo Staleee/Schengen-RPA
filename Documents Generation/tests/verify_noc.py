@@ -101,6 +101,78 @@ def _check(label: str, ok: bool, detail: str = "") -> int:
     return 0 if ok else 1
 
 
+CLIENT_NOC_PAYLOAD: Dict[str, object] = {
+    "client_name": "Baharul Alam Shayeb",
+    "client_nationality": "Bangladeshi",
+    "client_passport_number": "EF 1234567",
+    "client_contact_number": "+971 50 123 4567",
+    "maid_name": "Kusnayati BT Sukriyadi Rademun",
+    "maid_nationality": "Indonesian",
+    "maid_passport_number": "AS 940577",
+}
+
+STRUCK_PHRASE = "Wife / Husband /Son / Daughter /"
+
+
+def _check_client_noc() -> int:
+    """The Turkey client NOC: one page, nothing blank, and the struck-out options intact."""
+    failures = 0
+    content, content_type = _generate(dict(CLIENT_NOC_PAYLOAD), "client-noc")
+    print(f"\nclient-noc  ({len(content)} bytes, {content_type})")
+    if not content.startswith(b"%PDF"):
+        (OUT_DIR / "client_noc.docx").write_bytes(content)
+        return _check("converted to PDF", False, "got .docx")
+    path = OUT_DIR / "client_noc.pdf"
+    path.write_bytes(content)
+
+    doc = pymupdf.open(path)
+    try:
+        failures += _check("single page", doc.page_count == 1, f"got {doc.page_count}")
+        page = doc[0]
+        text = page.get_text()
+
+        failures += _check("no unsubstituted placeholders", "{{" not in text)
+        for label, value in (
+            ("client name", "Baharul Alam Shayeb"),
+            ("client nationality", "Bangladeshi"),
+            ("client passport number", "EF 1234567"),
+            ("maid name", "Kusnayati BT Sukriyadi Rademun"),
+            ("maid passport number", "AS 940577"),
+            ("client phone", "+971 50 123 4567"),
+        ):
+            failures += _check(f"{label} printed", value in text)
+
+        # The addressee has to sit on one line. A right indent that Google Docs used to fake
+        # centring squeezed the line until "UAE" wrapped onto one of its own.
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        failures += _check(
+            "addressee on one line (UAE not orphaned)",
+            any("Turkish Embassy" in line and "UAE" in line for line in lines)
+            and "UAE" not in lines,
+            f"addressee lines={[l for l in lines if 'Embassy' in l or l == 'UAE']}",
+        )
+
+        # Strike-through is drawn geometry in a PDF, not a text attribute: look for a thin line
+        # or filled rectangle crossing the phrase's own box.
+        struck = False
+        for rect in page.search_for(STRUCK_PHRASE):
+            band = pymupdf.Rect(rect.x0 - 2, rect.y0, rect.x1 + 2, rect.y1)
+            for drawing in page.get_drawings():
+                for item in drawing["items"]:
+                    if item[0] == "l" and band.contains(item[1]) and band.contains(item[2]):
+                        struck = True
+                    elif item[0] == "re" and item[1].height < 3 and band.intersects(item[1]):
+                        struck = True
+        failures += _check(
+            f"'{STRUCK_PHRASE}' is struck through", struck,
+            "" if struck else "no line drawn across the phrase",
+        )
+        page.get_pixmap(dpi=110).save(str(OUT_DIR / "client_noc_p0.png"))
+    finally:
+        doc.close()
+    return failures
+
+
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     _wait_for_service()
@@ -199,6 +271,8 @@ def main() -> int:
             page.get_pixmap(dpi=110).save(str(OUT_DIR / f"noc_turkey_p{i}.png"))
     finally:
         doc.close()
+
+    failures += _check_client_noc()
 
     print(f"\nartifacts in {OUT_DIR}")
     if failures:

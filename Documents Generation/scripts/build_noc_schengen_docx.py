@@ -49,6 +49,11 @@ LOGO = BASE_DIR / "assets" / "maidscc_letterhead.png"
 LOGO_WIDTH_PT = 250
 
 BODY_FONT = "Times New Roman"
+# Complex-script (Arabic) face, named explicitly rather than left to font fallback. The Latin
+# face is Times New Roman, which LibreOffice maps to Liberation Serif — a family with no Arabic
+# glyphs at all, so relying on the Latin name left the Arabic page as empty boxes. DejaVu Sans
+# is the Arabic-capable font present in the service image (see Dockerfile).
+ARABIC_FONT = "DejaVu Sans"
 BODY_SIZE = 11
 TITLE_FONT = "Arial"
 TITLE_SIZE = 14
@@ -261,8 +266,9 @@ def _style(doc, name: str, *, size: int, bold: bool, rtl: bool, font: str = BODY
     if r_fonts is None:
         r_fonts = OxmlElement("w:rFonts")
         r_pr.append(r_fonts)
-    for attr in ("w:ascii", "w:hAnsi", "w:cs"):
+    for attr in ("w:ascii", "w:hAnsi"):
         r_fonts.set(qn(attr), font)
+    r_fonts.set(qn("w:cs"), ARABIC_FONT if rtl else font)
     if rtl:
         for tag in ("w:rtl", "w:cs"):
             element = OxmlElement(tag)
@@ -332,7 +338,7 @@ def _build_footer(section, styles) -> None:
         run.font.size = Pt(size)
         r_pr = run._r.get_or_add_rPr()
         r_fonts = r_pr.get_or_add_rFonts()
-        r_fonts.set(qn("w:cs"), BODY_FONT)
+        r_fonts.set(qn("w:cs"), ARABIC_FONT if rtl else BODY_FONT)
         sz_cs = OxmlElement("w:szCs")
         sz_cs.set(qn("w:val"), str(size * 2))
         r_pr.append(sz_cs)

@@ -3,6 +3,7 @@ Documents Generation – replace {{variable}} placeholders in .docx templates.
 Uses python-docx so the output is always a valid .docx that Word opens without errors.
 """
 
+import copy
 import re
 from datetime import datetime
 from pathlib import Path
@@ -97,6 +98,31 @@ _POP_ISOLATE = "⁩"  # POP DIRECTIONAL ISOLATE
 
 _ARABIC_RE = re.compile(r"[؀-ۿݐ-ݿﭐ-﻿]")
 _DIGIT_RE = re.compile(r"[0-9]")
+
+
+def _run_format(run):
+    """A copy of a run's properties, for re-applying after the paragraph is rebuilt.
+
+    Bold stays in the copy but the caller always overrides it.
+    """
+    r_pr = run._r.find(qn("w:rPr"))
+    return copy.deepcopy(r_pr) if r_pr is not None else None
+
+
+def _without_strike(fmt):
+    """The same properties with strike-through removed.
+
+    Used for substituted values only. The client NOC strikes out
+    "Wife / Husband /Son / Daughter /" so that "Maid" reads as the operative word; a value
+    landing against that run must keep the font and size but never the strike. Static text keeps
+    its own strike, which is the whole point of preserving formatting here.
+    """
+    if fmt is None:
+        return None
+    clone = copy.deepcopy(fmt)
+    for strike in clone.findall(qn("w:strike")) + clone.findall(qn("w:dstrike")):
+        clone.remove(strike)
+    return clone
 
 
 def _has_rtl_paragraph(doc) -> bool:
@@ -270,8 +296,18 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
         return match.group(0)
 
     def process_paragraph(paragraph):
-        """Replace placeholders; only the substituted variable values are bold."""
-        full_text = "".join(run.text for run in paragraph.runs)
+        """Replace placeholders; only the substituted variable values are bold.
+
+        Substitution has to rebuild the paragraph's runs, because a placeholder can be split
+        across several of them. Each character's original run formatting is carried over so the
+        rebuild keeps it — without that, the client NOC's struck-through
+        "Wife / Husband /Son / Daughter /" came out as ordinary text, and any template font or
+        size on a line holding a placeholder was silently dropped. Bold stays under this
+        function's own control (values bold, static text not), so the letters keep the weight
+        they have always had.
+        """
+        runs = list(paragraph.runs)
+        full_text = "".join(run.text for run in runs)
         has_placeholder = "{{" in full_text
         has_schengen = _is_turkey and ("Schengen" in full_text or "schengen" in full_text)
         has_vfs = _is_spain and "VFS" in full_text
@@ -279,28 +315,58 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
         if not has_placeholder and not has_schengen and not has_vfs:
             return
 
+        # One entry per character: the run properties it came from, copied now because the runs
+        # themselves are about to be removed.
+        formats = [_run_format(run) for run in runs]
+        origin: List[object] = []
+        for index, run in enumerate(runs):
+            origin.extend([formats[index]] * len(run.text))
+
+        def static_segments(start: int, end: int):
+            """Split static text into runs of identical original formatting."""
+            out = []
+            i = start
+            while i < end:
+                fmt = origin[i] if i < len(origin) else None
+                j = i
+                while j < end and (origin[j] if j < len(origin) else None) is fmt:
+                    j += 1
+                out.append((full_text[i:j], fmt, False))
+                i = j
+            return out
+
         if has_placeholder:
-            # Build segments: (text, bold) – bold only for substituted values
+            # (text, source formatting, bold) – bold only for substituted values
             segments = []
             pos = 0
             for m in _PLACEHOLDER_RE.finditer(full_text):
-                segments.append((full_text[pos : m.start()], False))
+                segments.extend(static_segments(pos, m.start()))
                 var_name = normalize_key(m.group(1).strip())
-                segments.append((repl(m), var_name not in NON_BOLD_PLACEHOLDERS))
+                # A value takes the formatting of the placeholder's last character, which is the
+                # run the template author styled the token with (the opening "{{" often sits in
+                # the preceding plain run). Strike-through is never carried onto a value.
+                last = m.end() - 1
+                segments.append(
+                    (repl(m),
+                     _without_strike(origin[last]) if last < len(origin) else None,
+                     var_name not in NON_BOLD_PLACEHOLDERS)
+                )
                 pos = m.end()
-            segments.append((full_text[pos:], False))
+            segments.extend(static_segments(pos, len(full_text)))
         else:
-            segments = [(full_text, False)]
+            segments = static_segments(0, len(full_text))
 
         if _is_turkey:
             # Apply Schengen→Turkey on the JOINED text so cross-segment patterns like
             # "{{schengen_country}}" + " Schengen Visa" → "Turkey" + " Turkey Visa" get
             # collapsed to "Turkey Visa". Bold formatting is preserved when the cleaned
             # text is identical to the joined original.
-            joined = "".join(t for t, _ in segments)
+            joined = "".join(t for t, _, _ in segments)
             cleaned = _replace_schengen_with_turkey(joined)
             if cleaned != joined:
-                segments = [(cleaned, False)]
+                # The rewrite changes length, so per-character formatting no longer lines up;
+                # fall back to one plain run, as this branch has always done.
+                segments = [(cleaned, None, False)]
 
         if _is_spain:
             # Spain uses BLS for Schengen visa submission. The hard-coded "VFS"
@@ -308,20 +374,21 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
             # the per-segment text and keep the original bold flags intact.
             new_segments = []
             changed = False
-            for text, is_bold in segments:
+            for text, fmt, is_bold in segments:
                 rewritten = _replace_vfs_with_bls(text)
                 if rewritten != text:
                     changed = True
-                new_segments.append((rewritten, is_bold))
+                new_segments.append((rewritten, fmt, is_bold))
             if changed:
                 segments = new_segments
 
-        # Clear and rebuild: one run per segment, bold only for substituted values.
+        # Clear and rebuild: one run per segment, carrying each segment's original character
+        # formatting, with bold decided here (values bold, static text not).
         # Explicit newlines inside a substituted value (e.g. a multi-line accommodation
         # list) become real Word line breaks — a literal "\n" in a run is otherwise ignored.
         for run in list(paragraph.runs):
             run._r.getparent().remove(run._r)
-        for text, is_bold in segments:
+        for text, fmt, is_bold in segments:
             if not text:
                 continue
             for idx, part in enumerate(text.split("\n")):
@@ -329,6 +396,9 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
                     paragraph.add_run().add_break()
                 if part:
                     r = paragraph.add_run(part)
+                    if fmt is not None:
+                        r._r.insert(0, copy.deepcopy(fmt))
+                    # Set last so it wins over whatever the copied properties carried.
                     r.bold = is_bold
 
     def process_block(paragraphs, tables=None):
