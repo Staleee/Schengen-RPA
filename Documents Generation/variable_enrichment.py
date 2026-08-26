@@ -179,4 +179,29 @@ def enrich_variables(
         if not (out.get("destinations") or "").strip():
             out["destinations"] = (out.get("schengen_country") or "").strip()
 
+    # Maid NOC: the companion's passport number and Emirates ID are optional on the
+    # application, so the letter composes that clause instead of printing the labels
+    # around empty placeholders ("holder of passport number  , Emirates ID:").
+    if document_type in ("noc-schengen", "noc-turkey"):
+        passport = (out.get("companion_passport") or "").strip()
+        eid = (out.get("companion_eid") or "").strip()
+        out["companion_id_clause"] = _join_clauses(
+            f"holder of passport number {passport}" if passport else "",
+            f"Emirates ID: {eid}" if eid else "",
+        )
+        out["companion_id_clause_ar"] = _join_clauses(
+            f"حامل جواز السفر {passport}" if passport else "",
+            f"الهوية الإماراتية: {eid}" if eid else "",
+            separator="، ",
+        )
+
     return out
+
+
+def _join_clauses(*parts: str, separator: str = ", ") -> str:
+    """Join the non-empty parts, or "" when none are set.
+
+    No leading space — ``fill_document`` strips substituted values, so the template
+    carries the space before the placeholder instead.
+    """
+    return separator.join(p for p in parts if p)

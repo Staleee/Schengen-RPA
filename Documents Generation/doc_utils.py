@@ -19,7 +19,7 @@ _PLACEHOLDER_RE = re.compile(r"\{\{([^}]+)\}\}")
 # Substituted placeholder values are normally bold. A few placeholders carry
 # ordinary sentence text (e.g. the NOC "or their family" clause) and must render
 # in the same regular weight as the surrounding words, not bold.
-NON_BOLD_PLACEHOLDERS = {"family_suffix"}
+NON_BOLD_PLACEHOLDERS = {"family_suffix", "companion_id_clause", "companion_id_clause_ar"}
 
 # Per-document variables (snake_case). Zoho will call each endpoint with its own body.
 COVER_LETTER_VARIABLES = [

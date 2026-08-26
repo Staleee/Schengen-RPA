@@ -19,7 +19,6 @@ from PIL import Image
 from pypdf import PdfReader, PdfWriter
 import uvicorn
 
-from acroform_fill import fill_acroform_pdf
 from affidavit_fill import fill_affidavit_pdf, list_affidavit_placeholders
 from doc_utils import fill_document, list_placeholder_variables, normalize_key
 from pdf_convert import docx_to_pdf
@@ -51,11 +50,16 @@ AFFIDAVIT_TEMPLATE = BASE_DIR / "AFFIDAVIT-template.pdf"
 # operations, tokens converted by scripts/import_client_noc_docx.py) — standard fill flow.
 CLIENT_NOC_DOCX = BASE_DIR / "client-noc.docx"
 
-# The Schengen maid NOC is a genuine two-page (English + Arabic) AcroForm — every blank
-# is a real form field — filled by name and flattened via acroform_fill.py. The Turkey maid
-# NOC reuses the same form (document_type=noc-turkey), addressed to the Turkish mission via
-# the consulate_full_name value. (The tourist-visa maid NOC stays on the noc-travel.docx flow.)
-NOC_SCHENGEN_TEMPLATE = BASE_DIR / "Travel_NOC_Fillable.pdf"
+# The Schengen maid NOC is a two-page (English + Arabic) letter template, filled and
+# converted like the others. The Turkey maid NOC reuses it (document_type=noc-turkey),
+# addressed to the Turkish mission via the consulate_full_name value. (The tourist-visa
+# maid NOC stays on the noc-travel.docx flow.)
+#
+# It replaced Travel_NOC_Fillable.pdf, which was a flat letter with fixed-width AcroForm
+# fields over the gaps: nothing could reflow the sentence around a value, so real names
+# overflowed their gap, shrank to 5pt and clipped mid-word. Rebuilt by
+# scripts/build_noc_schengen_docx.py, which recovers the content from that PDF.
+NOC_SCHENGEN_DOCX = BASE_DIR / "noc-schengen.docx"
 
 # Single source of truth: for each document type, request_body_key -> template placeholder string.
 # Only these keys are used for each document; no inference, no guessing.
@@ -326,43 +330,37 @@ def _generate_client_noc(body: Dict[str, Any], format: Optional[str], output: Op
 
 
 def _generate_travel_noc(body: Dict[str, Any], format: Optional[str], document_type: str):
-    """Schengen / Turkey maid NOC — the two-page (English + Arabic) AcroForm PDF, filled by
-    field name and flattened to static content. Reached via POST /generate with
+    """Schengen / Turkey maid NOC — the two-page (English + Arabic) letter template, filled
+    and converted to PDF like the other letters. Reached via POST /generate with
     document_type=noc-schengen (pro-backend NOC_SCHENGEN URL) or noc-turkey (NOC_TURKEY URL);
-    both share Travel_NOC_Fillable.pdf, the addressee carried by the consulate_full_name value.
-    Request keys -> AcroForm field names come from document_mapping.json -> <document_type>;
+    both share noc-schengen.docx, the addressee carried by the consulate_full_name value.
+    Request keys -> template placeholders come from document_mapping.json -> <document_type>;
     camelCase/spaced keys are normalized."""
-    if not NOC_SCHENGEN_TEMPLATE.exists():
-        raise HTTPException(status_code=500, detail=f"Template not found: {NOC_SCHENGEN_TEMPLATE.name}")
-    doc_map = _load_mapping().get(document_type, {})
-    if not doc_map:
+    if not NOC_SCHENGEN_DOCX.exists():
+        raise HTTPException(status_code=500, detail=f"Template not found: {NOC_SCHENGEN_DOCX.name}")
+    if not _load_mapping().get(document_type):
         raise HTTPException(status_code=500, detail=f'No "{document_type}" block in document_mapping.json')
 
-    variables = _variables_for_document(body, document_type)
-    # Resolve each mapped AcroForm field name against its normalized request key.
-    values = {
-        field_name: variables.get(normalize_key(request_key), "")
-        for request_key, field_name in doc_map.items()
-    }
-    content = fill_acroform_pdf(NOC_SCHENGEN_TEMPLATE, values)
-    filename = document_type.replace("-", "_") + ".pdf"
+    content, _arc, media_type, extra = _build_one_document(
+        document_type, body, True, NOC_SCHENGEN_DOCX
+    )
+    suffix = "docx" if media_type == DOCX_MEDIA else "pdf"
+    filename = f"{document_type.replace('-', '_')}.{suffix}"
 
     if format and format.lower() == "json":
         return {
             "filename": filename,
-            "content_type": PDF_MEDIA,
+            "content_type": media_type,
             "content_base64": base64.b64encode(content).decode("ascii"),
         }
 
-    return Response(
-        content=content,
-        media_type=PDF_MEDIA,
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Length": str(len(content)),
-            "Cache-Control": "no-transform",
-        },
-    )
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Length": str(len(content)),
+        "Cache-Control": "no-transform",
+    }
+    headers.update(extra)
+    return Response(content=content, media_type=media_type, headers=headers)
 
 
 @app.post("/generate-affidavit")
