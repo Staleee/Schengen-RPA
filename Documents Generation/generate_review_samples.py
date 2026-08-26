@@ -1,7 +1,7 @@
 """Generate review copies of the maid NOC (all country variants) + Turkey client NOC.
 
-Word-based NOCs are written as filled .docx (production converts them to PDF via LibreOffice,
-which isn't installed locally). The Turkey client NOC is a flat PDF and is produced as a real PDF.
+All NOCs are Word-based and written as filled .docx (production converts them to PDF via
+LibreOffice, which isn't installed locally).
 
 Run from the Documents Generation directory:
     python generate_review_samples.py
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from affidavit_fill import fill_affidavit_pdf
 from doc_utils import fill_document
 from doc_utils import normalize_key
 import json
@@ -21,7 +20,7 @@ OUT = (BASE.parent / "REVIEW_SAMPLES").resolve()
 OUT.mkdir(parents=True, exist_ok=True)
 
 NOC_TEMPLATE = BASE / "noc-travel.docx"
-CLIENT_NOC_TEMPLATE = BASE / "client-noc-template.pdf"
+CLIENT_NOC_TEMPLATE = BASE / "client-noc.docx"
 
 MAID = {
     "maid_name": "Maria Santos Reyes",
@@ -85,15 +84,14 @@ def gen_client_noc() -> None:
         "maid_nationality": "Filipino",
         "maid_passport_number": "P0150695D",
     }
-    subs = {ph: vals.get(normalize_key(rk), "") for rk, ph in mapping.items()}
-    pdf = fill_affidavit_pdf(CLIENT_NOC_TEMPLATE, subs)
-    out = OUT / "ClientNOC_Turkey.pdf"
-    out.write_bytes(pdf)
+    variables = {normalize_key(rk): vals.get(normalize_key(rk), "") for rk in mapping}
+    out = OUT / "ClientNOC_Turkey.docx"
+    fill_document(CLIENT_NOC_TEMPLATE, variables, out)
     print(f"  wrote {out.name}")
 
 
 if __name__ == "__main__":
-    print("Generating maid NOC review samples (.docx) + Turkey client NOC (.pdf)...")
+    print("Generating maid NOC review samples (.docx) + Turkey client NOC (.docx)...")
     gen_nocs()
     gen_client_noc()
     print(f"Done -> {OUT}")

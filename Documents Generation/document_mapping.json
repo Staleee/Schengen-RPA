@@ -53,19 +53,25 @@
     "stay_line": "{{stay_line}}"
   },
   "noc-turkey": {
-    "addressee": "{{addressee}}",
-    "maid_name": "{{maid_name}}",
-    "maid_passport_number": "{{maid_passport_number}}",
-    "maid_nationality": "{{maid_nationality}}",
-    "maid_eid_number": "{{maid_eid_number}}",
-    "maid_profession": "{{maid_profession}}",
-    "destination_country": "{{destination_country}}",
-    "companion_salutation_name": "{{companion_salutation_name}}",
-    "companion_name": "{{companion_name}}",
-    "companion_nationality": "{{companion_nationality}}",
-    "companion_passport_number": "{{companion_passport_number}}",
-    "visa_type": "{{visa_type}}",
-    "signatory_name": "{{signatory_name}}"
+    "date_issued": "date_issued",
+    "consulate_full_name": "consulate_full_name",
+    "worker_name": "worker_name",
+    "destination_country": "destination_country",
+    "companion_name": "companion_name",
+    "companion_passport": "companion_passport",
+    "companion_eid": "companion_eid",
+    "worker_nationality": "worker_nationality",
+    "worker_passport": "worker_passport",
+    "worker_eid": "worker_eid",
+    "employment_start_date": "employment_start_date",
+    "visa_expiry_date": "visa_expiry_date",
+    "employer_name": "employer_name",
+    "employment_basis": "employment_basis",
+    "monthly_salary": "monthly_salary",
+    "annual_salary": "annual_salary",
+    "trip_purpose": "trip_purpose",
+    "travel_start_date": "travel_start_date",
+    "travel_end_date": "travel_end_date"
   },
   "noc-schengen": {
     "date_issued": "date_issued",
@@ -94,13 +100,13 @@
     "maid_nic_number": "{{nic-number}}"
   },
   "client-noc": {
-    "client_name": "{{client-name}}",
-    "client_nationality": "{{nationality}}",
-    "client_passport_number": "{{passport-no}}",
-    "client_contact_number": "{{client-no}}",
-    "maid_name": "{{maid-name}}",
-    "maid_nationality": "{{maid-nationality}}",
-    "maid_passport_number": "{{maid-passport-no}}"
+    "client_name": "{{client_name}}",
+    "client_nationality": "{{client_nationality}}",
+    "client_passport_number": "{{client_passport_number}}",
+    "client_contact_number": "{{client_contact_number}}",
+    "maid_name": "{{maid_name}}",
+    "maid_nationality": "{{maid_nationality}}",
+    "maid_passport_number": "{{maid_passport_number}}"
   },
   "invitation": {
     "schengen_country": "{{schengen_country}}",

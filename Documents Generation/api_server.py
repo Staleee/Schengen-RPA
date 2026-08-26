@@ -41,22 +41,20 @@ TEMPLATES = {
     "sponsor": BASE_DIR / "Sponsor_letter.docx",
     "cover": BASE_DIR / "Cover_Letter.docx",
     "noc": BASE_DIR / "noc-travel.docx",
-    # Turkey maid NOC — separate template (addressed to the Turkish consulate/embassy, signed by
-    # "HR Manager", NO Aldrin name/stamp/signature). TEMPLATE PENDING: drop in noc-turkey.docx.
-    # /generate returns a clear "Template not found" error until the file is provided.
-    "noc-turkey": BASE_DIR / "noc-turkey.docx",
 }
 
 # The GCC issuing affidavit is a flat PDF template (no AcroForm fields), filled
 # via search/redact/insert in affidavit_fill.py instead of the .docx flow.
 AFFIDAVIT_TEMPLATE = BASE_DIR / "AFFIDAVIT-template.pdf"
 
-# The Turkey client NOC is also a flat {{placeholder}} PDF filled via affidavit_fill.py.
-CLIENT_NOC_TEMPLATE = BASE_DIR / "client-noc-template.pdf"
+# The Turkey client NOC is a .docx letter template (source: turkey/NOC (1).docx provided by
+# operations, tokens converted by scripts/import_client_noc_docx.py) — standard fill flow.
+CLIENT_NOC_DOCX = BASE_DIR / "client-noc.docx"
 
 # The Schengen maid NOC is a genuine two-page (English + Arabic) AcroForm — every blank
-# is a real form field — filled by name and flattened via acroform_fill.py. (The tourist-visa
-# maid NOC stays on the noc-travel.docx flow above; this template is Schengen-only.)
+# is a real form field — filled by name and flattened via acroform_fill.py. The Turkey maid
+# NOC reuses the same form (document_type=noc-turkey), addressed to the Turkish mission via
+# the consulate_full_name value. (The tourist-visa maid NOC stays on the noc-travel.docx flow.)
 NOC_SCHENGEN_TEMPLATE = BASE_DIR / "Travel_NOC_Fillable.pdf"
 
 # Single source of truth: for each document type, request_body_key -> template placeholder string.
@@ -78,13 +76,15 @@ def _ensure_zip_content(content: bytes, label: str = "file") -> None:
 
 
 def _build_one_document(
-    document_type: str, body: Dict[str, Any], want_pdf: bool
+    document_type: str, body: Dict[str, Any], want_pdf: bool, template_path: Optional[Path] = None
 ) -> tuple[bytes, str, str, Dict[str, str]]:
     """
     Fill template; return (bytes, filename, media_type, extra_headers).
     want_pdf=True: convert to PDF (LibreOffice). If conversion fails, returns .docx with X-Pdf-Unavailable.
+    template_path overrides the TEMPLATES lookup (for docx templates handled outside the
+    TEMPLATES registry, e.g. client-noc).
     """
-    path = TEMPLATES[document_type]
+    path = template_path or TEMPLATES[document_type]
     variables = enrich_variables(
         document_type, _variables_for_document(body, document_type), body
     )
@@ -211,12 +211,12 @@ async def generate_one(
             status_code=422,
             detail="document_type is required. Add to URL: ?document_type=invitation (or sponsor or cover). Or put in body: \"document_type\": \"invitation\".",
         )
-    # Turkey client NOC is a flat {{placeholder}} PDF (not a .docx), filled via affidavit_fill.
+    # Turkey client NOC is a .docx letter template (client-noc.docx) — standard fill flow.
     if dt == "client-noc":
-        return _generate_client_noc(body, format)
-    # Schengen maid NOC is a two-page (EN+AR) AcroForm, filled by field name + flattened.
-    if dt == "noc-schengen":
-        return _generate_noc_schengen(body, format)
+        return _generate_client_noc(body, format, output)
+    # Schengen + Turkey maid NOCs share the two-page (EN+AR) AcroForm, filled by field name.
+    if dt in ("noc-schengen", "noc-turkey"):
+        return _generate_travel_noc(body, format, dt)
     if dt not in TEMPLATES:
         raise HTTPException(status_code=400, detail=f"document_type must be one of: {list(TEMPLATES.keys())} or client-noc")
     path = TEMPLATES[dt]
@@ -296,25 +296,16 @@ async def generate_all(
     )
 
 
-def _generate_client_noc(body: Dict[str, Any], format: Optional[str]):
-    """Turkey client NOC — flat {{placeholder}} PDF filled via affidavit_fill.py.
+def _generate_client_noc(body: Dict[str, Any], format: Optional[str], output: Optional[str]):
+    """Turkey client NOC — the client-noc.docx letter template (standard fill flow;
+    substituted values render bold like the other letters).
     Reached via POST /generate?document_type=client-noc (the pro-backend SCHENGEN_CLIENT_NOC URL).
     Request keys come from document_mapping.json -> "client-noc"; camelCase keys are normalized."""
-    if not CLIENT_NOC_TEMPLATE.exists():
-        raise HTTPException(status_code=500, detail=f"Template not found: {CLIENT_NOC_TEMPLATE.name}")
-    doc_map = _load_mapping().get("client-noc", {})
-    if not doc_map:
-        raise HTTPException(status_code=500, detail='No "client-noc" block in document_mapping.json')
-
-    variables = enrich_variables("client-noc", _variables_for_document(body, "client-noc"), body)
-    # The PDF placeholders use hyphens ({{client-name}}); resolve each mapped placeholder
-    # literal against its normalized request key.
-    substitutions = {
-        placeholder: variables.get(normalize_key(request_key), "")
-        for request_key, placeholder in doc_map.items()
-    }
-    content = fill_affidavit_pdf(CLIENT_NOC_TEMPLATE, substitutions)
-    filename = "client_noc.pdf"
+    if not CLIENT_NOC_DOCX.exists():
+        raise HTTPException(status_code=500, detail=f"Template not found: {CLIENT_NOC_DOCX.name}")
+    want_pdf = (output or "").lower().strip() != "docx"
+    content, _arc, media_type, _extra = _build_one_document("client-noc", body, want_pdf, CLIENT_NOC_DOCX)
+    filename = "client_noc.pdf" if media_type == PDF_MEDIA else "client_noc.docx"
 
     if format and format.lower() == "json":
         return {
@@ -334,25 +325,27 @@ def _generate_client_noc(body: Dict[str, Any], format: Optional[str]):
     )
 
 
-def _generate_noc_schengen(body: Dict[str, Any], format: Optional[str]):
-    """Schengen maid NOC — a two-page (English + Arabic) AcroForm PDF, filled by field name.
-    Reached via POST /generate?document_type=noc-schengen (the pro-backend NOC_SCHENGEN URL).
-    Request keys -> AcroForm field names come from document_mapping.json -> "noc-schengen";
-    camelCase/spaced keys are normalized. The filled form is flattened to static content."""
+def _generate_travel_noc(body: Dict[str, Any], format: Optional[str], document_type: str):
+    """Schengen / Turkey maid NOC — the two-page (English + Arabic) AcroForm PDF, filled by
+    field name and flattened to static content. Reached via POST /generate with
+    document_type=noc-schengen (pro-backend NOC_SCHENGEN URL) or noc-turkey (NOC_TURKEY URL);
+    both share Travel_NOC_Fillable.pdf, the addressee carried by the consulate_full_name value.
+    Request keys -> AcroForm field names come from document_mapping.json -> <document_type>;
+    camelCase/spaced keys are normalized."""
     if not NOC_SCHENGEN_TEMPLATE.exists():
         raise HTTPException(status_code=500, detail=f"Template not found: {NOC_SCHENGEN_TEMPLATE.name}")
-    doc_map = _load_mapping().get("noc-schengen", {})
+    doc_map = _load_mapping().get(document_type, {})
     if not doc_map:
-        raise HTTPException(status_code=500, detail='No "noc-schengen" block in document_mapping.json')
+        raise HTTPException(status_code=500, detail=f'No "{document_type}" block in document_mapping.json')
 
-    variables = _variables_for_document(body, "noc-schengen")
+    variables = _variables_for_document(body, document_type)
     # Resolve each mapped AcroForm field name against its normalized request key.
     values = {
         field_name: variables.get(normalize_key(request_key), "")
         for request_key, field_name in doc_map.items()
     }
     content = fill_acroform_pdf(NOC_SCHENGEN_TEMPLATE, values)
-    filename = "noc_schengen.pdf"
+    filename = document_type.replace("-", "_") + ".pdf"
 
     if format and format.lower() == "json":
         return {
