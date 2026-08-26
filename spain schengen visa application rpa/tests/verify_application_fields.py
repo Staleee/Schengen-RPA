@@ -53,6 +53,14 @@ TICK_FIELDS = {
     "8 sex (female)": "MujerFemale",
     "9 marital status (single)": "ChkBox",
 }
+# §9 has a box per status. Only single and married were ever mapped, so a maid whose ERP civil
+# status is DIVORCED or WIDOW had the whole field left blank.
+MARITAL_BOXES = {
+    "single": "ChkBox",
+    "married": "ChkBox-0",
+    "divorced": "ChkBox-1",
+    "widowed": "ChkBox-2",
+}
 # Must come out blank: the applicant's own address/email and her phone.
 MUST_BE_BLANK = {
     "19 address + email": "Texto18",
@@ -224,6 +232,36 @@ def main() -> int:
     ok = "siyes" in re.sub(r"#([0-9A-Fa-f]{2})", "", sel2).lower().replace(" ", "")
     failures += 0 if ok else 1
     print("  %-4s %-28s %s" % ("ok" if ok else "FAIL", "20 still Yes", "Yes selected" if ok else sel2))
+
+    # --- every civil status the ERP can hold has to tick its own box ---------------------
+    print("\nmarital status (ERP HousemaidCivilStatus values)")
+    for status, field in MARITAL_BOXES.items():
+        pdf3 = OUT_DIR / f"application-marital-{status}.pdf"
+        pdf3.write_bytes(_fill(dict(COMPLETE, marital_status=status)))
+        vals3 = _values(pdf3)
+        ticked = [name for name in MARITAL_BOXES.values() if vals3.get(name) in (True, "On", "/On")]
+        ok = ticked == [field]
+        failures += 0 if ok else 1
+        print("  %-4s %-12s -> %-10s %s" % ("ok" if ok else "FAIL", status, field,
+                                            "" if ok else f"ticked={ticked}"))
+
+    # --- field 20's mark has to be visible, not merely set ------------------------------
+    doc = pymupdf.open(OUT_DIR / "application-complete-profile.pdf")
+    try:
+        marked = False
+        for page in doc:
+            for w in page.widgets() or []:
+                if w.field_name == FIELD_20_RADIO and w.field_value not in (None, "", "Off"):
+                    band = pymupdf.Rect(w.rect)
+                    for drawing in page.get_drawings():
+                        for item in drawing["items"]:
+                            if item[0] == "l" and band.contains(item[1]) and band.contains(item[2]):
+                                marked = True
+        failures += 0 if marked else 1
+        print("\n  %-4s 20 selected radio carries a drawn cross, not just the faint built-in dot"
+              % ("ok" if marked else "FAIL"))
+    finally:
+        doc.close()
 
     print(f"\nartifacts in {OUT_DIR}")
     if failures:

@@ -28,6 +28,18 @@ COSTS_DEFAULT_ON_KEYS = (
     "costs_sponsor_referred_in_field_30_or_31",
 )
 
+# §9 marital status: the logical key, and the words that select it. Checked in order, so the
+# first match wins and exactly one box is ticked. Covers every HousemaidCivilStatus value in the
+# ERP (SINGLE, MARRIED, DIVORCED, WIDOW) plus the other options the form prints.
+_MARITAL_OPTIONS = (
+    ("single", ("single", "unmarried", "soltero", "soltera")),
+    ("married", ("married", "casado", "casada")),
+    ("divorced", ("divorced", "divorciado", "divorciada")),
+    ("widowed", ("widow", "widowed", "widower", "viudo", "viuda")),
+    ("separated", ("separated", "separado", "separada")),
+    ("registered_union", ("registered union", "registered_union", "union registrada")),
+)
+
 
 def _today_dd_mm_yyyy() -> str:
     return date.today().strftime("%d/%m/%Y")
@@ -299,12 +311,18 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     # §1/§3 footer repeats (`ApellidosSumamefamily name`, `NombresFirst names Given names`):
     # left blank in pdf_fill — do not mirror surname / given names here.
 
-    # §9 Marital: Single = ChkBox, Married = ChkBox-0
-    if _truthy(b.get("marital_status_single")) or str(b.get("marital_status", "")).lower() == "single":
-        out["marital_status_single"] = True
-        out["marital_status_married"] = False
-    if _truthy(b.get("marital_status_married")) or str(b.get("marital_status", "")).lower() == "married":
-        out["marital_status_married"] = True
-        out["marital_status_single"] = False
+    # §9 Marital status. Only Single and Married used to be handled, so a maid whose ERP civil
+    # status is DIVORCED or WIDOW had every box left blank. The form carries a box for each, and
+    # exactly one is ticked: the caller's explicit flag wins, otherwise the free-text
+    # `marital_status` decides.
+    marital = str(b.get("marital_status", "")).strip().lower()
+    chosen = None
+    for option, words in _MARITAL_OPTIONS:
+        if _truthy(b.get(f"marital_status_{option}")) or marital in words:
+            chosen = option
+            break
+    if chosen:
+        for option, _ in _MARITAL_OPTIONS:
+            out[f"marital_status_{option}"] = option == chosen
 
     return out

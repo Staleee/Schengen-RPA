@@ -62,8 +62,16 @@ TEXTO_FIELD_MAP: Dict[str, str] = {
 CHECKBOX_ALIASES: Dict[str, str] = {
     "sex_male": "VarónMale",
     "sex_female": "MujerFemale",
+    # §9 marital status. The form offers Single / Married / Registered union / Separated /
+    # Divorced / Widow-er / Other, and HousemaidCivilStatus in the ERP is SINGLE, MARRIED,
+    # DIVORCED or WIDOW — but only the first two were ever mapped, so a divorced or widowed
+    # maid had nothing ticked at all.
     "marital_status_single": "ChkBox",
     "marital_status_married": "ChkBox-0",
+    "marital_status_divorced": "ChkBox-1",
+    "marital_status_widowed": "ChkBox-2",
+    "marital_status_separated": "SeparadoaSeparated",
+    "marital_status_registered_union": "Unión registrada",
     "civil_status_single": "ChkBox",
     "marital_married": "ChkBox-0",
     "travel_doc_ordinary_passport": "Pasaporte ordinarioOrdinary Passport",
@@ -261,8 +269,17 @@ def _fill_with_fitz(
         except (AttributeError, RuntimeError):
             pass
         cb = fitz.PDF_WIDGET_TYPE_CHECKBOX
-        text_field_seen: set[str] = set()
+        if _drop_duplicate_widgets(doc):
+            # Removing annotations leaves the remaining ones unbound, even on a fresh widgets()
+            # call, so the document is round-tripped to get clean state before filling.
+            data = doc.tobytes()
+            doc.close()
+            doc = fitz.open(stream=data, filetype="pdf")
+        # Drawing on a page invalidates that page's other Annot objects, so ticks are collected
+        # here as (page index, rect) and drawn once every widget has been written.
+        marks: list = []
         for i in range(len(doc)):
+            # Iterated lazily on purpose: updating one widget unbinds the others in a snapshot.
             for w in doc[i].widgets() or []:
                 fn = w.field_name
                 if not fn or fn not in resolved:
@@ -273,38 +290,37 @@ def _fill_with_fitz(
                     is_on = sval in ("/On", "/Yes", "Yes", "on", "On", "true", "True", "1")
                     w.field_value = is_on
                     w.update()
+                    if is_on:
+                        marks.append((i, fitz.Rect(w.rect)))
                 else:
-                    # BLS template often has two widgets sharing the same field name; updating both
-                    # can draw overlapping text. Only the first text widget per name gets the value.
-                    if fn in text_field_seen:
-                        w.field_value = ""
-                        w.update()
-                        continue
-                    text_field_seen.add(fn)
                     w.field_value = str(val)
                     w.update()
-        _select_radios(doc, radio_on or {})
+        marks.extend(_select_radios(doc, radio_on or {}))
+        for page_index, rect in marks:
+            _draw_selected_mark(doc[page_index], rect)
         return doc.tobytes()
     finally:
         doc.close()
 
 
-def _select_radios(doc, radio_on: Dict[str, str]) -> None:
+def _select_radios(doc, radio_on: Dict[str, str]) -> list:
     """Turn on the widget of each radio group whose on-state matches the wanted answer.
 
     A radio group's widgets all share one field name, so it cannot be set by name like a
     checkbox — each widget carries its own on-state and setting that state selects it. The
     on-state comes back PDF-name-escaped (``#20`` = space, ``#C3#AD`` = í), so it is decoded
-    before matching the substring from RADIO_GROUPS.
+    before matching the substring from RADIO_GROUPS. Returns the rects to mark, for the caller to
+    draw once all widgets have been written.
     """
     if not radio_on:
-        return
+        return []
     import fitz
 
     def decode(name: str) -> str:
         return re.sub(r"#([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), name or "")
 
-    for page in doc:
+    marks = []
+    for index, page in enumerate(doc):
         for w in page.widgets() or []:
             if w.field_type != fitz.PDF_WIDGET_TYPE_RADIOBUTTON:
                 continue
@@ -312,6 +328,67 @@ def _select_radios(doc, radio_on: Dict[str, str]) -> None:
             if wanted and wanted.lower() in decode(w.on_state()).lower():
                 w.field_value = w.on_state()
                 w.update()
+                marks.append((index, fitz.Rect(w.rect)))
+    return marks
+
+
+def _drop_duplicate_widgets(doc) -> int:
+    """Remove redundant widgets stacked on top of one another.
+
+    Nine text fields on page 3 of this template carry two widget annotations 0.5pt apart. All the
+    widgets of one AcroForm field show that field's single value, so each of those printed its
+    value twice, overlapping — the §31 host phone, the §34 sponsor phone and the sponsor name all
+    came out doubled at two different auto-sizes, looking like a printing fault on a submitted
+    application. It cannot be fixed by blanking one of them: there is only one value behind both.
+
+    Only widgets of the same field that actually sit on top of each other are dropped, so a field
+    legitimately repeated elsewhere on the form is left alone.
+    """
+    removed = 0
+    for page in doc:
+        # Deleting an annotation unbinds the page's other Annot objects, so the page is rescanned
+        # after each removal rather than deleting from a snapshot.
+        while True:
+            target = None
+            kept: Dict[str, list] = {}
+            for index, widget in enumerate(page.widgets() or []):
+                name = widget.field_name
+                if not name:
+                    continue
+                rect = widget.rect
+                for other in kept.get(name, []):
+                    overlap = (rect & other).get_area()
+                    smaller = min(rect.get_area(), other.get_area())
+                    if smaller > 0 and overlap > 0.5 * smaller:
+                        target = index
+                        break
+                if target is not None:
+                    break
+                kept.setdefault(name, []).append(rect)
+            if target is None:
+                break
+            for index, widget in enumerate(page.widgets() or []):
+                if index == target:
+                    page.delete_widget(widget)
+                    removed += 1
+                    break
+    return removed
+
+
+def _draw_selected_mark(page, rect) -> None:
+    """Draw a cross in a ticked box, on top of whatever appearance the widget carries.
+
+    The template's widgets do not agree on what "ticked" looks like: some draw a full cross,
+    others a small centred dot barely a fifth the size. §20 and §9 were both reported as unticked
+    when the fields were in fact set, because a dot on a printed application reads as a speck.
+    Drawing the mark into the page itself makes every tick identical and unmistakable, and makes
+    it independent of whether the reader's viewer regenerates form appearances at all.
+    """
+    inset = min(rect.width, rect.height) * 0.22
+    box = (rect.x0 + inset, rect.y0 + inset, rect.x1 - inset, rect.y1 - inset)
+    width = max(0.6, min(rect.width, rect.height) * 0.1)
+    page.draw_line((box[0], box[1]), (box[2], box[3]), color=(0, 0, 0), width=width)
+    page.draw_line((box[0], box[3]), (box[2], box[1]), color=(0, 0, 0), width=width)
 
 
 def _fill_with_pypdf(template: Path, updates: Dict[str, str]) -> bytes:
