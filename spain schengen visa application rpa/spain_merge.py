@@ -16,6 +16,18 @@ DEFAULT_PURPOSE_24 = (
 )
 DEFAULT_PLACE_COUNTRY = "United Arab Emirates"
 
+# §33 "Cost of travelling and living during the applicant's stay is covered". In the maids.cc
+# flow the client always sponsors the maid's trip and is the host already named in §30/§31, so
+# all three boxes default ON; an explicit false in the request still wins. On the harmonised
+# form these are "por un patrocinador anfitrión…", "indicado en las casillas 30 o 31" and
+# "Todos los gastos de estancia…". multi_country_fill applies the same rule, so every country
+# template behaves identically.
+COSTS_DEFAULT_ON_KEYS = (
+    "all_expenses_covered_during_stay",
+    "costs_paid_by_sponsor_host",
+    "costs_sponsor_referred_in_field_30_or_31",
+)
+
 
 def _today_dd_mm_yyyy() -> str:
     return date.today().strftime("%d/%m/%Y")
@@ -278,10 +290,8 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     if s_phone:
         out["sponsor_client_phone_line"] = s_phone
 
-    if "all_expenses_covered_during_stay" not in out:
-        out["all_expenses_covered_during_stay"] = True
-    # "por un patrocinador anfitrión…" — default off; set `costs_paid_by_sponsor_host`: true to tick
-    out["costs_paid_by_sponsor_host"] = _truthy(b.get("costs_paid_by_sponsor_host"))
+    for costs_key in COSTS_DEFAULT_ON_KEYS:
+        out[costs_key] = _truthy(b[costs_key]) if costs_key in b else True
 
     if not out.get("place_and_date"):
         out["place_and_date"] = f"{DEFAULT_PLACE_COUNTRY}, {_today_dd_mm_yyyy()}"

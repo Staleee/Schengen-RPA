@@ -360,5 +360,25 @@
    227.1,
    640.5
   ]
+ },
+ "costs_paid_by_sponsor_host": {
+  "page": 3,
+  "check": true,
+  "box": [
+   220.4,
+   488.9,
+   227.4,
+   495.9
+  ]
+ },
+ "costs_sponsor_referred_in_field_30_or_31": {
+  "page": 3,
+  "check": true,
+  "box": [
+   220.4,
+   530.9,
+   227.4,
+   537.9
+  ]
  }
 }

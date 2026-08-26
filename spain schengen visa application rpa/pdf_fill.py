@@ -75,6 +75,8 @@ CHECKBOX_ALIASES: Dict[str, str] = {
     "resident_outside_nationality_yes": "20 Residente en un país distinto del país de nacio",
     "all_expenses_covered_during_stay": "Todos los gastos de estancia están cubiertosAll ex",
     "costs_paid_by_sponsor_host": "por un patrocinador anfitrión empresa u organizaci",
+    # §33 sub-option under "by a sponsor" — the host is the one already named in §30/§31.
+    "costs_sponsor_referred_in_field_30_or_31": "indicado en las casillas 30 031",
     "schengen_before_yes": "SÍyes",
     "schengen_before_no": "NOno",
 }

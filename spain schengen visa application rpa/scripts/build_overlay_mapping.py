@@ -68,6 +68,10 @@ CHECK_FIELDS = [
     ("entries_two",                     "Two entries"),
     ("entries_multiple",                "Multiple entries"),
     ("all_expenses_covered_during_stay","All expenses covered during the stay"),
+    # §33 costs. The sponsor options wrap mid-label on several forms, so anchor on the
+    # opening words only ("by a sponsor (host, company," / "referred to in field 30 or 31").
+    ("costs_paid_by_sponsor_host",      "by a sponsor"),
+    ("costs_sponsor_referred_in_field_30_or_31", "referred to in field"),
 ]
 
 SPECS = {
@@ -88,6 +92,11 @@ OVERRIDES: dict = {
         # label's last line; address+email -> blank area below the address sub-label block.
         "partner_name":          {"page": 3, "rect": [319.0, 418.0, 433.0, 433.5], "align": "left", "valign": "bottom", "fontsize": 8.5},
         "partner_address_email": {"page": 3, "rect": [70.0, 503.5, 250.0, 532.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
+        # Field 33 "referred to in field 30 or 31": this form justifies the option onto a dotted
+        # leader ("........☐ referred to in field" / "30 or 31"), so the nearest-☐-to-the-left
+        # anchor lands ~4pt left of the real box and the tick straddles its edge. Pinned to the
+        # actual ☐ glyph at [327.9, 107.8, 338.2, 123.3], centred the same way build() does.
+        "costs_sponsor_referred_in_field_30_or_31": {"page": 4, "check": True, "box": [329.6, 112.1, 336.6, 119.1]},
     },
     "italy": {
         # Field 28 arrival/departure are label + dotted line to the RIGHT (not a cell below),

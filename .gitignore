@@ -4,3 +4,6 @@ TTLTTE/
 # Virtual environments
 .venv/
 venv/
+
+# Generated test artifacts (filled PDFs + review renders)
+spain schengen visa application rpa/tests/output/

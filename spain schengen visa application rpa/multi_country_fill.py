@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 from pdf_field_resolve import collect_field_names_from_pdf, resolve_updates
+from spain_merge import COSTS_DEFAULT_ON_KEYS
 
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
@@ -182,6 +183,19 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     # Travel document: ordinary passport unless told otherwise.
     out.setdefault("travel_doc_ordinary_passport", True)
+
+    # §33 costs — same three boxes and the same default-ON rule as the Spain path. These used to
+    # be applied only in spain_merge, which this path never reaches, so every non-Spain template
+    # left the sponsor boxes blank unless the caller spelled them out.
+    for costs_key in COSTS_DEFAULT_ON_KEYS:
+        out[costs_key] = _truthy(b[costs_key]) if costs_key in b else True
+
+    # A couple of templates build a tick box as a one-character *text* input instead of a real
+    # checkbox (Switzerland's §33 "referred to in field 30 or 31" is the field literally named
+    # `undefined`), so the same answer is also exposed as a mark to type into it.
+    out["costs_sponsor_referred_mark"] = (
+        "X" if out["costs_sponsor_referred_in_field_30_or_31"] else ""
+    )
 
     # Composed accommodation address from the structured parts, when no combined value given.
     if not _nonempty(out.get("hotel_address")):

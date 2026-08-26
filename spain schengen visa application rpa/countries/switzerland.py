@@ -30,6 +30,10 @@ TEXT_MAP = {
     "partner_address_email": "Address and email address of inviting personshotelstemporary accommodations  Adresse et adresse électronique de la ou des personnes qui invitentde lhôtel ou des hôtelsdu ou des lieux dhébergement temporaire",
     "partner_phone": "Telephone no  Numéro de téléphone_2",
     "residence_number": "11 National identity number where applicable  Numéro national didentité le cas échéant",
+    # §33 "referred to in field 30 or 31". This template builds that tick box as a
+    # one-character text input named `undefined` (its "other (please specify)" twin is
+    # `undefined_2`), not a checkbox — so it takes a typed mark, not an on/off state.
+    "costs_sponsor_referred_mark": "undefined",
     "place_and_date": "Place and date  Lieu et date",
 }
 
@@ -46,6 +50,9 @@ CHECKBOX_MAP = {
     "resident_outside_nationality_yes": "Yes Residence permit or equivalent  Oui Autorisation de séjour ou équivalent",
     "resident_outside_nationality_no": "No  Non",
     "all_expenses_covered_during_stay": "All expenses covered during the stay",
+    # §33 costs: the sponsor box was never mapped, so it stayed blank on every Swiss form.
+    # (This template has no "referred to in field 30 or 31" box — that one is harmonised-only.)
+    "costs_paid_by_sponsor_host": "by a sponsor host company organisation please specify",
 }
 
 register_country(
