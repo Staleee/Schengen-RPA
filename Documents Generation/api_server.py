@@ -55,10 +55,10 @@ CLIENT_NOC_DOCX = BASE_DIR / "client-noc.docx"
 # addressed to the Turkish mission via the consulate_full_name value. (The tourist-visa
 # maid NOC stays on the noc-travel.docx flow.)
 #
-# It replaced Travel_NOC_Fillable.pdf, which was a flat letter with fixed-width AcroForm
-# fields over the gaps: nothing could reflow the sentence around a value, so real names
-# overflowed their gap, shrank to 5pt and clipped mid-word. Rebuilt by
-# scripts/build_noc_schengen_docx.py, which recovers the content from that PDF.
+# It replaced Travel_NOC_Fillable.pdf (removed from the tree; in git history), which was a flat
+# letter with fixed-width AcroForm fields over the gaps: nothing could reflow the sentence around
+# a value, so real names overflowed their gap, shrank to 5pt and clipped mid-word. Built by
+# scripts/build_noc_schengen_docx.py, which recovered the content from that PDF.
 NOC_SCHENGEN_DOCX = BASE_DIR / "noc-schengen.docx"
 
 # Single source of truth: for each document type, request_body_key -> template placeholder string.

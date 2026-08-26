@@ -7,9 +7,10 @@ overflowed those gaps — a 30-character maid name got shrunk to 5pt and clipped
 ("Kusnayati BT Sukri"). A .docx goes through the same fill + LibreOffice path as every
 other letter here, where text reflows and Word shapes the Arabic itself.
 
-Content is recovered from the PDF template, not retyped:
+That PDF has since been removed from the tree (recover it from git history if the wording ever
+needs re-checking against the original). Its content was recovered rather than retyped:
 
-* The letterhead PNG is extracted from the PDF.
+* The letterhead PNG was extracted from it and is committed at assets/maidscc_letterhead.png.
 * The English page is taken verbatim from the PDF's static text.
 * The Arabic page was de-shaped back to base letters and is embedded below as literals.
   Every Arabic glyph in the PDF is a presentation form (U+FB50..U+FEFF) that NFKC maps
@@ -17,8 +18,7 @@ Content is recovered from the PDF template, not retyped:
   ``"".join(unicodedata.normalize("NFKC", c) for c in span_text)``. Punctuation the PDF
   stored at the visual edge of a run was moved back to its logical position by hand.
 
-Three defects in the PDF template are repaired on the way (all verified present, see the
-module docstring notes in acroform_fill.py for the rest):
+Three defects in the PDF template are repaired on the way, all verified present in it:
 
 1. The Arabic "Emirates ID" phrase was shattered across two lines as
    "Emirates" / ". المتحدة" / "م" — rewritten as الهوية الإماراتية.
@@ -33,7 +33,6 @@ The Arabic wording is a reconstruction and needs a native-speaker review before 
 
 from pathlib import Path
 
-import pymupdf
 from docx import Document
 from docx.enum.section import WD_SECTION
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -42,7 +41,6 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-PDF_TEMPLATE = BASE_DIR / "Travel_NOC_Fillable.pdf"
 OUTPUT = BASE_DIR / "noc-schengen.docx"
 LOGO = BASE_DIR / "assets" / "maidscc_letterhead.png"
 
@@ -163,16 +161,10 @@ ARABIC_BODY = [
 ]
 
 
-def _extract_logo() -> Path:
-    """Pull the letterhead PNG out of the PDF template."""
-    LOGO.parent.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open(PDF_TEMPLATE)
-    try:
-        xref = doc[0].get_images(full=True)[0][0]
-        image = doc.extract_image(xref)
-        LOGO.write_bytes(image["image"])
-    finally:
-        doc.close()
+def _require_logo() -> Path:
+    """The letterhead, extracted once from the retired PDF and committed alongside this script."""
+    if not LOGO.exists():
+        raise SystemExit(f"Missing letterhead asset: {LOGO.relative_to(BASE_DIR)}")
     return LOGO
 
 
@@ -288,7 +280,7 @@ def _build_footer(section, styles) -> None:
 
 
 def main() -> None:
-    _extract_logo()
+    _require_logo()
     doc = Document()
 
     normal = doc.styles["Normal"]
