@@ -160,7 +160,14 @@ CASES: List[Tuple[str, Optional[str], Dict[str, object], Dict[str, bool]]] = [
     ("greece-caller-sends-false", "greece", ALL_OFF_PAYLOAD, ALL_OFF),
 ]
 
-OVERLAY_COUNTRIES = ("italy", "greece", "bulgaria", "portugal")
+# Italy moved to the ops-provided fillable template, so it is an AcroForm now — and like the
+# Swiss form its tick boxes are one-character TEXT inputs rather than checkboxes.
+OVERLAY_COUNTRIES = ("greece", "bulgaria", "portugal")
+ITALY_TEXT_MARKS = {
+    SPONSOR: "Cost_paid_by_sponsor",
+    REFERRED: "Sponsor_referred_field",
+    ALL_EXPENSES: "Sponsor_means_all_expenses",
+}
 
 
 def _wait_for_service(timeout: float = 60.0) -> None:
@@ -362,12 +369,18 @@ def main() -> int:
                     clip = box if clip is None else (clip | box)
                 region = (page_no, clip) if clip is not None else None
         else:
-            fields = SWISS_FIELDS if country == "switzerland" else HARMONISED_FIELDS
-            actual = _acroform_state(pdf_path, fields)
-            if country == "switzerland":
-                actual.update(_text_mark_state(pdf_path, SWISS_TEXT_MARKS))
-            engine = "acroform"
-            region = _acroform_region(pdf_path, fields)
+            if country == "italy":
+                fields = {}
+                actual = _text_mark_state(pdf_path, ITALY_TEXT_MARKS)
+                engine = "acroform/marks"
+                region = _acroform_region(pdf_path, ITALY_TEXT_MARKS)
+            else:
+                fields = SWISS_FIELDS if country == "switzerland" else HARMONISED_FIELDS
+                actual = _acroform_state(pdf_path, fields)
+                if country == "switzerland":
+                    actual.update(_text_mark_state(pdf_path, SWISS_TEXT_MARKS))
+                engine = "acroform"
+                region = _acroform_region(pdf_path, fields)
 
         if region is not None:
             _render_region(pdf_path, region[0], region[1], OUT_DIR / f"{name}_field33.png")

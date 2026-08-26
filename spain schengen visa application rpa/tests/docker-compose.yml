@@ -36,4 +36,4 @@ services:
     command:
       - sh
       - -c
-      - "python tests/verify_field33.py && python tests/verify_application_fields.py"
+      - "python tests/verify_field33.py && python tests/verify_application_fields.py && python tests/verify_italy.py"

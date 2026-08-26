@@ -29,6 +29,9 @@ from spain_merge import COSTS_DEFAULT_ON_KEYS
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
 
+# What gets typed into a tick box that is really a one-character text input.
+MARK = "X"
+
 
 class CountryConfig(NamedTuple):
     template: str                      # filename under assets/
@@ -48,6 +51,10 @@ class CountryConfig(NamedTuple):
     # acroform engine only: radio-button groups. logical key -> (field name, on-state string).
     # When the logical value is truthy, the group is set to that on-state.
     radio_map: Optional[Dict[str, Tuple[str, str]]] = None
+    # acroform engine only: tick boxes built as one-character TEXT inputs rather than checkboxes.
+    # logical key -> text field name; a truthy value types MARK into it, a falsy one clears it.
+    # The Italian fillable form is entirely of this kind, and the Swiss form has two.
+    mark_map: Optional[Dict[str, str]] = None
 
 
 # Country configs are registered by register_country() from countries/*.py modules at import.
@@ -158,10 +165,12 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
         # than leaving the field blank. An explicit sex_male from the caller still wins.
         out["sex_female"], out["sex_male"] = True, False
 
-    # Country of birth from nationality (demonym -> country)
-    nat = _nonempty(b.get("nationality"))
-    if nat and "country_of_birth" not in out:
-        out["country_of_birth"] = _country_name(nat)
+    # Country of birth: always a country, never a demonym. pro-backend sends the nationality
+    # here, so §6 printed "Egyptian" instead of "Egypt" — and because the key was present, the
+    # demonym mapping below used to be skipped entirely.
+    cob = _nonempty(b.get("country_of_birth")) or _nonempty(b.get("nationality"))
+    if cob:
+        out["country_of_birth"] = _country_name(cob)
 
     # Number of entries checkboxes
     n = str(b.get("number_of_entries", "")).lower()
@@ -234,6 +243,11 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
         out["given_names"] = b["maid_first_names"]
     if _nonempty(b.get("maid_surname")) and "surname" not in out:
         out["surname"] = b["maid_surname"]
+    # §2 surname at birth. pro-backend only ever sends maid_surname_at_birth, and this was never
+    # derived — so every template mapping surname_at_birth (Italy plus all three other overlay
+    # countries) left §2 blank.
+    if _nonempty(b.get("maid_surname_at_birth")) and "surname_at_birth" not in out:
+        out["surname_at_birth"] = b["maid_surname_at_birth"]
 
     # Combined "place, country" of birth (many forms use a single box for both).
     place = _nonempty(b.get("maid_place_of_birth"))
@@ -275,7 +289,13 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
 
             parsed = _json.loads(dc)
             if isinstance(parsed, list):
-                extras = [str(x).strip() for x in parsed if str(x).strip()]
+                # Entries are usually plain country names but can be objects; str() on one of
+                # those would print "{'country': 'Greece'}" onto the form.
+                extras = []
+                for item in parsed:
+                    name = item.get("country") if isinstance(item, dict) else item
+                    if _nonempty(name):
+                        extras.append(str(name).strip())
         except Exception:
             extras = []
     dests = ([main_dest] if main_dest else []) + [e for e in extras if e != main_dest]
@@ -310,6 +330,11 @@ def _build_updates(config: CountryConfig, merged: Dict[str, Any], pdf_fields: Op
         if key not in merged:
             continue
         out[pdf_name] = "/On" if _truthy(merged[key]) else "/Off"
+    for key, pdf_name in (config.mark_map or {}).items():
+        # Left blank rather than marked when the answer is not the one the box states. These forms
+        # print only one option per group, so marking it regardless would assert something untrue
+        # (ticking "Single" for a married applicant, say).
+        out[pdf_name] = MARK if _truthy(merged.get(key)) else ""
     for fn in config.force_empty:
         out[fn] = ""
     if pdf_fields:
@@ -318,6 +343,36 @@ def _build_updates(config: CountryConfig, merged: Dict[str, Any], pdf_fields: Op
                 continue
             out[str(k).strip()] = str(v).strip()
     return out
+
+
+# A text value below this size is too small to read on a submitted form; reported rather than
+# shrunk silently further.
+MIN_TEXT_FONTSIZE = 5.0
+
+
+def _fit_text(widget, value: str, clipped: Dict[str, float]) -> None:
+    """Shrink a single-line field's font until the value fits inside it.
+
+    An AcroForm field renders whatever it is given and simply clips the overflow, with nothing to
+    say it happened — Italy's §25 held "Italy, Greece" in a 45pt-wide box at 9pt and printed
+    "Italy, Gree". Multi-line fields are left alone; they wrap instead of clipping.
+    """
+    if not value or (widget.field_flags or 0) & 4096:
+        return
+    width = widget.rect.width - 4.0
+    size = widget.text_fontsize or 9.0
+    if width <= 0:
+        return
+    import fitz
+
+    while size > MIN_TEXT_FONTSIZE:
+        if fitz.get_text_length(value, fontname="helv", fontsize=size) <= width:
+            break
+        size -= 0.25
+    if size != (widget.text_fontsize or 9.0):
+        widget.text_fontsize = size
+    if size <= MIN_TEXT_FONTSIZE:
+        clipped[widget.field_name] = size
 
 
 def _fill_template(template: Path, updates: Dict[str, str], clear_existing: bool, radio_map: Optional[Dict[str, Tuple[str, str]]] = None, merged: Optional[Dict[str, Any]] = None) -> bytes:
@@ -331,6 +386,7 @@ def _fill_template(template: Path, updates: Dict[str, str], clear_existing: bool
 
     canonical = collect_field_names_from_pdf(str(template))
     resolved = resolve_updates(updates, canonical)
+    clipped: Dict[str, float] = {}
 
     # Radio groups: logical key truthy -> set the group field to its on-state value.
     radio_on: Dict[str, str] = {}
@@ -381,6 +437,7 @@ def _fill_template(template: Path, updates: Dict[str, str], clear_existing: bool
                                 w.field_flags = (w.field_flags or 0) | 4096
                             except Exception:
                                 pass
+                        _fit_text(w, sval, clipped)
                         w.field_value = sval
                     w.update()
         # Radio groups: select the widget whose on-state matches the desired value.
@@ -396,6 +453,8 @@ def _fill_template(template: Path, updates: Dict[str, str], clear_existing: bool
                 if fn in radio_on and _decode(w.on_state()).strip().lower() == _decode(radio_on[fn]).strip().lower():
                     w.field_value = w.on_state()
                     w.update()
+        if clipped:
+            print(f"!! values too long for their field even at {MIN_TEXT_FONTSIZE}pt: {clipped}")
         return doc.tobytes()
     finally:
         doc.close()
@@ -432,7 +491,41 @@ def fill_country_pdf(
         return fill_overlay_pdf(template, values, config.overlay_map or {}, list(config.redact_strings))
 
     updates = _build_updates(config, merged, pdf_fields)
+    missing = report_missing_options(config, merged)
+    if missing:
+        # These forms print one option per group, so an answer the form cannot express leaves the
+        # box blank. Surfaced rather than silently skipped.
+        print(f"[{key}] !! form has no box for: {missing}")
     return _fill_template(template, updates, config.clear_existing, config.radio_map, merged)
+
+
+def report_missing_options(config: CountryConfig, merged: Dict[str, Any]) -> Tuple[str, ...]:
+    """Tick groups the caller answered but this template has no box for."""
+    marks = config.mark_map or {}
+    gaps = []
+    for group, options in MARK_GROUPS:
+        answered = [k for k in options if _truthy(merged.get(k))]
+        if answered and not any(k in marks for k in answered):
+            gaps.append(f"{group}={answered[0]}")
+    return tuple(gaps)
+
+
+# Tick groups where a template may carry only some of the options. Used to report an answer the
+# form cannot state, instead of leaving an unexplained blank.
+MARK_GROUPS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    ("sex", ("sex_female", "sex_male")),
+    (
+        "marital status",
+        (
+            "marital_status_single", "marital_status_married", "marital_status_divorced",
+            "marital_status_widowed", "marital_status_separated",
+            "marital_status_registered_union",
+        ),
+    ),
+    ("entries", ("entries_multiple", "entries_two", "entries_one")),
+    ("previous Schengen visa", ("schengen_before_no", "schengen_before_yes")),
+    ("residence elsewhere", ("resident_outside_nationality_yes", "resident_outside_nationality_no")),
+)
 
 
 def list_country_fields(country: str) -> Tuple[str, ...]:
