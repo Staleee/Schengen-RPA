@@ -7,3 +7,4 @@ venv/
 
 # Generated test artifacts (filled PDFs + review renders)
 spain schengen visa application rpa/tests/output/
+Documents Generation/tests/output/

@@ -7,6 +7,7 @@ Optional overrides: my_pdf_mapping.json (see HOW_I_FIX_THE_MAPPING.md).
 """
 
 import json
+import re
 import warnings
 from io import BytesIO
 from pathlib import Path
@@ -72,7 +73,6 @@ CHECKBOX_ALIASES: Dict[str, str] = {
     "entries_one": "UnaOne entry",
     "entries_two": "DosTwo entries",
     "entries_multiple": "MúltiplesMultiple entries",
-    "resident_outside_nationality_yes": "20 Residente en un país distinto del país de nacio",
     "all_expenses_covered_during_stay": "Todos los gastos de estancia están cubiertosAll ex",
     "costs_paid_by_sponsor_host": "por un patrocinador anfitrión empresa u organizaci",
     # §33 sub-option under "by a sponsor" — the host is the one already named in §30/§31.
@@ -88,12 +88,37 @@ SPONSOR_PHONE_PDF = "Número de teléfono  Phone number"
 # Printed “32” (company name/address) — leave blank per ops; not the same as generic `Texto32`.
 FIELD_32_COMPANY_LINE = "32 Nombre y dirección de la empresa u organización"
 
+# Printed “19” (the applicant's own home address + email, and her phone number) — both boxes
+# stay blank per ops. Note the phone here is the page-2 maid phone; the §31 host phone is the
+# distinct `…-0` field above and is still filled.
+FIELD_19_ADDRESS_EMAIL = "Texto18"
+FIELD_19_PHONE = "Números de teléfonoTelephone numbers"
+
 # Cleared unless caller passes them in `pdf_fields` (applied before pdf_fields merge).
 FORCE_EMPTY_UNLESS_PDF_FIELDS: Tuple[str, ...] = (
     "Texto17",
     "Texto27",
     FIELD_32_COMPANY_LINE,
+    FIELD_19_ADDRESS_EMAIL,
+    FIELD_19_PHONE,
 )
+
+# Printed “20” (resident of a country other than the country of current nationality) is a RADIO
+# group, not a checkbox: both widgets share one field name and each carries its own on-state, so
+# writing "/On" did nothing and the field always printed blank. Selecting the group means finding
+# the widget whose on-state identifies the answer. Matched on a distinguishing substring because
+# the real on-states are long PDF-escaped names ("20#20Residente#20en#20un#20pa#C3#ADs…_SiYes…").
+# logical key -> (field name, substring identifying the wanted widget's on-state)
+RADIO_GROUPS: Dict[str, Tuple[str, str]] = {
+    "resident_outside_nationality_yes": (
+        "20 Residente en un país distinto del país de nacio",
+        "siyes",
+    ),
+    "resident_outside_nationality_no": (
+        "20 Residente en un país distinto del país de nacio",
+        "nono",
+    ),
+}
 
 # Page-1 footer repeats of §1 / §3 — ops leave blank (not a second copy of surname/given names).
 FOOTER_NAME_FIELDS_ALWAYS_BLANK: Tuple[str, ...] = (
@@ -129,6 +154,46 @@ def _truthy(v: Any) -> bool:
         return False
     s = str(v).strip().lower()
     return s in ("1", "true", "yes", "y", "on")
+
+
+# Printed field -> what has to be present for it to render at all. These come off the maid's
+# profile, so when the profile is incomplete the box simply prints blank and the gap is only
+# noticed once a consulate rejects the application. Reported instead of silently skipped; the
+# values cannot be defaulted here (nobody should be inventing a marital status on a visa form).
+REQUIRED_FOR_SUBMISSION: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    ("5 place of birth", ("maid_place_of_birth",)),
+    ("8 sex", ("sex_male", "sex_female")),
+    ("9 marital status", ("marital_status_single", "marital_status_married")),
+    ("13 travel document number", ("passport_number",)),
+    ("14 date of issue", ("passport_issue_date",)),
+    ("15 valid until", ("passport_expiry_date",)),
+    ("16 issued by", ("passport_issuing_country",)),
+)
+
+
+def missing_required_fields(structured: Dict[str, Any]) -> Tuple[str, ...]:
+    """Printed fields that will come out blank because no source value arrived."""
+    missing = []
+    for label, keys in REQUIRED_FOR_SUBMISSION:
+        if not any(_present(structured.get(k)) for k in keys):
+            missing.append(label)
+    return tuple(missing)
+
+
+def _present(value: Any) -> bool:
+    """A tick box counts as present only when actually on; a text box when non-blank."""
+    if isinstance(value, bool):
+        return value
+    return bool(str(value).strip()) if value is not None else False
+
+
+def _radio_selections(structured: Dict[str, Any]) -> Dict[str, str]:
+    """field name -> on-state substring, for each radio group the body answers."""
+    out: Dict[str, str] = {}
+    for logical, (field_name, on_state) in RADIO_GROUPS.items():
+        if _truthy(structured.get(logical)):
+            out[field_name] = on_state
+    return out
 
 
 def _build_updates(structured: Dict[str, Any], pdf_fields: Optional[Dict[str, str]]) -> Dict[str, str]:
@@ -176,7 +241,9 @@ def _build_updates(structured: Dict[str, Any], pdf_fields: Optional[Dict[str, st
     return out
 
 
-def _fill_with_fitz(template: Path, updates: Dict[str, str]) -> bytes:
+def _fill_with_fitz(
+    template: Path, updates: Dict[str, str], radio_on: Optional[Dict[str, str]] = None
+) -> bytes:
     """Apply AcroForm values with PyMuPDF (more reliable than pypdf on this BLS PDF)."""
     import fitz
 
@@ -216,9 +283,35 @@ def _fill_with_fitz(template: Path, updates: Dict[str, str]) -> bytes:
                     text_field_seen.add(fn)
                     w.field_value = str(val)
                     w.update()
+        _select_radios(doc, radio_on or {})
         return doc.tobytes()
     finally:
         doc.close()
+
+
+def _select_radios(doc, radio_on: Dict[str, str]) -> None:
+    """Turn on the widget of each radio group whose on-state matches the wanted answer.
+
+    A radio group's widgets all share one field name, so it cannot be set by name like a
+    checkbox — each widget carries its own on-state and setting that state selects it. The
+    on-state comes back PDF-name-escaped (``#20`` = space, ``#C3#AD`` = í), so it is decoded
+    before matching the substring from RADIO_GROUPS.
+    """
+    if not radio_on:
+        return
+    import fitz
+
+    def decode(name: str) -> str:
+        return re.sub(r"#([0-9A-Fa-f]{2})", lambda m: chr(int(m.group(1), 16)), name or "")
+
+    for page in doc:
+        for w in page.widgets() or []:
+            if w.field_type != fitz.PDF_WIDGET_TYPE_RADIOBUTTON:
+                continue
+            wanted = radio_on.get(w.field_name)
+            if wanted and wanted.lower() in decode(w.on_state()).lower():
+                w.field_value = w.on_state()
+                w.update()
 
 
 def _fill_with_pypdf(template: Path, updates: Dict[str, str]) -> bytes:
@@ -255,8 +348,12 @@ def fill_spain_schengen_pdf(
 
     updates = _build_updates(data, pdf_fields)
 
+    missing = missing_required_fields(data)
+    if missing:
+        print(f"[spain] !! these printed fields have no source value and will be blank: {list(missing)}")
+
     try:
-        return _fill_with_fitz(path, updates)
+        return _fill_with_fitz(path, updates, _radio_selections(data))
     except ImportError:
         warnings.warn("pymupdf not installed; using pypdf (fewer fields may appear). pip install pymupdf", stacklevel=2)
         return _fill_with_pypdf(path, updates)

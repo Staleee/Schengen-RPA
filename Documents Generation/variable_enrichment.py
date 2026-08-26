@@ -17,6 +17,44 @@ except ImportError:
     num2words = None  # type: ignore
 
 
+# Every variable that carries an Emirates ID into a template.
+_EID_KEYS = ("worker_eid", "companion_eid", "maid_eid_number")
+
+# A UAE Emirates ID is 15 digits beginning 784, conventionally written 784-YYYY-NNNNNNN-C.
+_EID_DIGITS = 15
+_EID_PREFIX = "784"
+
+# Unicode bidi isolates, for a left-to-right value embedded in an Arabic sentence.
+_LTR_ISOLATE = "⁦"  # LEFT-TO-RIGHT ISOLATE
+_POP_ISOLATE = "⁩"  # POP DIRECTIONAL ISOLATE
+
+
+def _isolate_ltr(value: str) -> str:
+    return f"{_LTR_ISOLATE}{value}{_POP_ISOLATE}" if value else value
+
+
+# U+2011 NON-BREAKING HYPHEN, drawn identically to "-" but not a line-break opportunity.
+# With ordinary hyphens the ID broke across a line on the NOC's Arabic page and the two halves
+# came out in right-to-left order ("784-1988-" then "8-1234567") — an ID number that reads wrong
+# on a document a consulate checks. Keeping it one unbreakable token avoids that entirely.
+_NB_HYPHEN = "‑"
+
+
+def format_emirates_id(value: str) -> Optional[str]:
+    """``"784199012345671"`` -> ``"784‑1990‑1234567‑1"``; None when it is not an Emirates ID.
+
+    Accepts any punctuation or spacing around the digits, so an already-formatted value is
+    re-emitted in the canonical form. Returns None rather than guessing when the digit count is
+    wrong — a short value is missing digits and cannot be reconstructed. Separators are
+    non-breaking hyphens (see ``_NB_HYPHEN``).
+    """
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) != _EID_DIGITS or not digits.startswith(_EID_PREFIX):
+        return None
+    parts = (digits[:3], digits[3:7], digits[7:14], digits[14])
+    return _NB_HYPHEN.join(parts)
+
+
 def _parse_zoho_year_month_day(s: str) -> Optional[date]:
     """
     Zoho sends dates as year/month/day (not day/month/year).
@@ -179,6 +217,23 @@ def enrich_variables(
         if not (out.get("destinations") or "").strip():
             out["destinations"] = (out.get("schengen_country") or "").strip()
 
+    # Emirates ID: the ERP stores it as free text, so it arrives unpunctuated, part-punctuated
+    # or spaced. Print it in the official 784-YYYY-NNNNNNN-C form wherever the digits allow.
+    for eid_key in _EID_KEYS:
+        raw = (out.get(eid_key) or "").strip()
+        if not raw:
+            continue
+        formatted = format_emirates_id(raw)
+        if formatted:
+            out[eid_key] = formatted
+        else:
+            # Not repairable here — a value like "487627" is missing digits outright. Printed as
+            # given rather than invented, and surfaced so the profile can be corrected.
+            print(
+                f"[{document_type}] !! {eid_key}={raw!r} is not a 15-digit Emirates ID "
+                f"(784-YYYY-NNNNNNN-C); printed as given"
+            )
+
     # Maid NOC: the companion's passport number and Emirates ID are optional on the
     # application, so the letter composes that clause instead of printing the labels
     # around empty placeholders ("holder of passport number  , Emirates ID:").
@@ -189,9 +244,13 @@ def enrich_variables(
             f"holder of passport number {passport}" if passport else "",
             f"Emirates ID: {eid}" if eid else "",
         )
+        # The Arabic clause mixes Arabic with left-to-right values, so doc_utils cannot isolate
+        # it wholesale — the passport number and Emirates ID are fenced individually here, or
+        # bidi renders them right-to-left inside the Arabic sentence (the ID printed as
+        # "8-1234567-1988-784").
         out["companion_id_clause_ar"] = _join_clauses(
-            f"حامل جواز السفر {passport}" if passport else "",
-            f"الهوية الإماراتية: {eid}" if eid else "",
+            f"حامل جواز السفر {_isolate_ltr(passport)}" if passport else "",
+            f"الهوية الإماراتية: {_isolate_ltr(eid)}" if eid else "",
             separator="، ",
         )
 

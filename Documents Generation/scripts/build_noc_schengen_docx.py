@@ -31,6 +31,7 @@ The Arabic wording is a reconstruction and needs a native-speaker review before 
     python scripts/build_noc_schengen_docx.py
 """
 
+import re
 from pathlib import Path
 
 from docx import Document
@@ -161,6 +162,39 @@ ARABIC_BODY = [
 ]
 
 
+# Unicode bidi isolates, so a left-to-right run inside right-to-left text stays one unit.
+_LTR_ISOLATE = "⁦"  # LEFT-TO-RIGHT ISOLATE
+_POP_ISOLATE = "⁩"  # POP DIRECTIONAL ISOLATE
+
+# A run of Latin/digits and the punctuation that belongs inside it (phone "+", date comma,
+# EID hyphens, "P.O. Box"). Placeholders are handled separately — see _isolate_ltr_runs.
+# A leading "+" must be inside the isolate, not beside it — that is the character bidi was
+# moving to the wrong end of the phone number.
+_LTR_RUN_RE = re.compile(r"\+?[A-Za-z0-9][A-Za-z0-9 .,:+/()–-]*[A-Za-z0-9)]|\+?[A-Za-z0-9]")
+_PLACEHOLDER_RE = re.compile(r"\{\{[^}]+\}\}")
+
+
+def _isolate_ltr_runs(text: str) -> str:
+    """Fence each left-to-right run in an Arabic line so bidi cannot reorder it.
+
+    Without this the Arabic page reorders its own static text: the signature phone
+    "+971 505544143" printed as "505544143 971+", because bidi reads the "+" as trailing the
+    number rather than leading it. Same class of problem as the substituted values, but these
+    are authored into the template, so doc_utils never sees them.
+
+    Placeholders are left alone: doc_utils isolates each substituted value itself, and wrapping
+    the ``{{name}}`` token here would just nest the isolates.
+    """
+    out, pos = [], 0
+    for placeholder in _PLACEHOLDER_RE.finditer(text):
+        out.append(_LTR_RUN_RE.sub(lambda m: f"{_LTR_ISOLATE}{m.group(0)}{_POP_ISOLATE}",
+                                   text[pos:placeholder.start()]))
+        out.append(placeholder.group(0))
+        pos = placeholder.end()
+    out.append(_LTR_RUN_RE.sub(lambda m: f"{_LTR_ISOLATE}{m.group(0)}{_POP_ISOLATE}", text[pos:]))
+    return "".join(out)
+
+
 def _require_logo() -> Path:
     """The letterhead, extracted once from the retired PDF and committed alongside this script."""
     if not LOGO.exists():
@@ -230,12 +264,14 @@ def _add_block(doc, entries, *, rtl: bool, styles: dict) -> None:
         style_name = {"h": "heading", "b": "body", "l": "bullet"}[kind]
         paragraph = doc.add_paragraph(style=styles[style_name])
         _set_bidi(paragraph, rtl)
+        # Only the Arabic page needs bidi isolation; on the English page it would be inert noise.
+        body = _isolate_ltr_runs(text) if rtl else text
         if kind == "l":
             paragraph.paragraph_format.left_indent = Inches(0 if rtl else 0.35)
             paragraph.paragraph_format.right_indent = Inches(0.35 if rtl else 0)
-            paragraph.add_run("- " + text)
+            paragraph.add_run("- " + body)
         else:
-            paragraph.add_run(text)
+            paragraph.add_run(body)
         if kind == "h":
             paragraph.runs[0].underline = True
 
@@ -268,7 +304,7 @@ def _build_footer(section, styles) -> None:
         if rtl:
             _set_bidi(paragraph, True)
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = paragraph.add_run(text)
+        run = paragraph.add_run(_isolate_ltr_runs(text) if rtl else text)
         run.font.name = BODY_FONT
         run.font.size = Pt(size)
         r_pr = run._r.get_or_add_rPr()

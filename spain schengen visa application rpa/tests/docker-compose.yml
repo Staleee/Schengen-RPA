@@ -33,4 +33,7 @@ services:
       RPA_BASE_URL: "http://rpa:8090"
     volumes:
       - ./output:/app/tests/output
-    command: ["python", "tests/verify_field33.py"]
+    command:
+      - sh
+      - -c
+      - "python tests/verify_field33.py && python tests/verify_application_fields.py"

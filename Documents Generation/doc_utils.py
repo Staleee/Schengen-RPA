@@ -89,6 +89,32 @@ def _sanitize_for_word(value: str) -> str:
     return _INVALID_XML_RE.sub("", value)
 
 
+# Unicode bidi isolates. Wrapping a left-to-right value in these makes it one directional run,
+# so the bidi algorithm cannot reorder its pieces against the surrounding text.
+_LTR_ISOLATE = "⁦"  # LEFT-TO-RIGHT ISOLATE
+_POP_ISOLATE = "⁩"  # POP DIRECTIONAL ISOLATE
+
+_ARABIC_RE = re.compile(r"[؀-ۿݐ-ݿﭐ-﻿]")
+_LTR_CONTENT_RE = re.compile(r"[A-Za-z0-9]")
+
+
+def _isolate_if_ltr(value: str) -> str:
+    """Fence a left-to-right value so Arabic paragraphs cannot reorder it.
+
+    On the NOC's Arabic page a substituted value sits inside right-to-left text, and the bidi
+    algorithm treats its digit and Latin segments as separate runs. That printed "26 August,
+    2026" as "August, 2026 26", "+971 505544143" as "505544143 971+", and split an Emirates ID
+    across a line break into "784-1988-" / "8-1234567" — a mangled ID number on a document a
+    consulate reads. Isolating the value keeps it intact.
+
+    Only applied to values that are actually left-to-right (Latin letters or digits, no Arabic),
+    so the Arabic clauses are untouched. On the all-LTR letters the isolates are inert.
+    """
+    if not value or _ARABIC_RE.search(value) or not _LTR_CONTENT_RE.search(value):
+        return value
+    return f"{_LTR_ISOLATE}{value}{_POP_ISOLATE}"
+
+
 _SCHENGEN_TURKEY_RE = re.compile(r"Schengen\s+Turkey|Turkey\s+Schengen", re.IGNORECASE)
 _SCHENGEN_WORD_RE = re.compile(r"\bSchengen\b", re.IGNORECASE)
 # After substitution + Schengen→Turkey, "{{schengen_country}} Schengen" becomes
@@ -225,7 +251,7 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
             return f"{n.month}/{n.day}/{n.year}"  # e.g. 3/10/2026
         if var_name in normalized:
             filled.append(var_name)
-            return normalized[var_name]
+            return _isolate_if_ltr(normalized[var_name])
         return match.group(0)
 
     def process_paragraph(paragraph):

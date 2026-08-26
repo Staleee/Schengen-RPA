@@ -1,0 +1,37 @@
+# Runs the Documents Generation service and drives it over HTTP with static payloads, then
+# checks and renders the generated documents. Both services use the same image, so the test
+# exercises what deploys — including LibreOffice, so the NOC really is converted to PDF here
+# rather than falling back to .docx the way a machine without it does.
+#
+#   docker compose -f tests/docker-compose.yml up --build --abort-on-container-exit
+#
+# Generated PDFs and page renders land in tests/output/ for review.
+
+services:
+  docgen:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8000"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/variables', timeout=3).status==200 else 1)\""
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  tests:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      docgen:
+        condition: service_healthy
+    environment:
+      DOCGEN_BASE_URL: "http://docgen:8000"
+    volumes:
+      - ./output:/app/tests/output
+    command: ["python", "tests/verify_noc.py"]
