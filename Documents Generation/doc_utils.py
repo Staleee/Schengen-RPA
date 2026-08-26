@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from docx import Document
+from docx.oxml.ns import qn
 
 # XML 1.0 invalid control chars (only \t \n \r are allowed in content)
 _INVALID_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff]")
@@ -95,22 +96,33 @@ _LTR_ISOLATE = "⁦"  # LEFT-TO-RIGHT ISOLATE
 _POP_ISOLATE = "⁩"  # POP DIRECTIONAL ISOLATE
 
 _ARABIC_RE = re.compile(r"[؀-ۿݐ-ݿﭐ-﻿]")
-_LTR_CONTENT_RE = re.compile(r"[A-Za-z0-9]")
+_DIGIT_RE = re.compile(r"[0-9]")
+
+
+def _has_rtl_paragraph(doc) -> bool:
+    """True when the template contains a right-to-left paragraph (only the maid NOC does).
+
+    Bidi isolation is only meaningful on such a document. Restricting it keeps the all-English
+    letters free of control characters that anything reading their text back would have to
+    strip.
+    """
+    return bool(doc.element.body.findall(".//" + qn("w:bidi")))
 
 
 def _isolate_if_ltr(value: str) -> str:
-    """Fence a left-to-right value so Arabic paragraphs cannot reorder it.
+    """Fence a value containing numbers so Arabic paragraphs cannot reorder its parts.
 
-    On the NOC's Arabic page a substituted value sits inside right-to-left text, and the bidi
-    algorithm treats its digit and Latin segments as separate runs. That printed "26 August,
-    2026" as "August, 2026 26", "+971 505544143" as "505544143 971+", and split an Emirates ID
-    across a line break into "784-1988-" / "8-1234567" — a mangled ID number on a document a
-    consulate reads. Isolating the value keeps it intact.
+    Only values with digits need this. A number is bidi-weak, so inside right-to-left text its
+    digits get placed against the surrounding direction while any Latin words beside them stay
+    left-to-right — which is what printed "26 August, 2026" as "August, 2026 26", "+971
+    505544143" as "505544143 971+" and an Emirates ID as "8-1234567-1988-784".
 
-    Only applied to values that are actually left-to-right (Latin letters or digits, no Arabic),
-    so the Arabic clauses are untouched. On the all-LTR letters the isolates are inert.
+    Plain text needs nothing: a Latin word like "Kusnayati BT Sukriyadi Rademun" or "Turkey" is
+    strongly left-to-right on its own and bidi already renders it correctly inside an Arabic
+    sentence. Isolating those would only add control characters for no gain. Arabic values are
+    left alone so they keep the paragraph's own direction.
     """
-    if not value or _ARABIC_RE.search(value) or not _LTR_CONTENT_RE.search(value):
+    if not value or _ARABIC_RE.search(value) or not _DIGIT_RE.search(value):
         return value
     return f"{_LTR_ISOLATE}{value}{_POP_ISOLATE}"
 
@@ -237,6 +249,8 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
 
     normalized = {normalize_key(k): _sanitize_for_word((str(v) if v is not None else "").strip()) for k, v in variables.items()}
     filled: List[str] = []
+    # Set once the document is open, below; repl() only runs after that.
+    isolate_values = {"on": False}
 
     # Determine Turkey / Spain mode from the mapped variables.
     _is_turkey = normalized.get("is_turkey", "").lower() in ("true", "1", "yes")
@@ -251,7 +265,8 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
             return f"{n.month}/{n.day}/{n.year}"  # e.g. 3/10/2026
         if var_name in normalized:
             filled.append(var_name)
-            return _isolate_if_ltr(normalized[var_name])
+            value = normalized[var_name]
+            return _isolate_if_ltr(value) if isolate_values["on"] else value
         return match.group(0)
 
     def process_paragraph(paragraph):
@@ -327,6 +342,7 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
                             process_paragraph(p)
 
     doc = Document(doc_path)
+    isolate_values["on"] = _has_rtl_paragraph(doc)
 
     # Body: paragraphs and tables
     process_block(doc.paragraphs, doc.tables)

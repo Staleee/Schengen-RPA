@@ -167,11 +167,17 @@ _LTR_ISOLATE = "⁦"  # LEFT-TO-RIGHT ISOLATE
 _POP_ISOLATE = "⁩"  # POP DIRECTIONAL ISOLATE
 
 # A run of Latin/digits and the punctuation that belongs inside it (phone "+", date comma,
-# EID hyphens, "P.O. Box"). Placeholders are handled separately — see _isolate_ltr_runs.
-# A leading "+" must be inside the isolate, not beside it — that is the character bidi was
-# moving to the wrong end of the phone number.
+# EID hyphens, "P.O. Box"). A leading "+" must be inside the isolate, not beside it — that is
+# the character bidi was moving to the wrong end of the phone number.
 _LTR_RUN_RE = re.compile(r"\+?[A-Za-z0-9][A-Za-z0-9 .,:+/()–-]*[A-Za-z0-9)]|\+?[A-Za-z0-9]")
 _PLACEHOLDER_RE = re.compile(r"\{\{[^}]+\}\}")
+_DIGIT_RE = re.compile(r"[0-9]")
+
+# U+200F RIGHT-TO-LEFT MARK. A paragraph whose whole content is left-to-right (the date line,
+# the phone) otherwise takes its line placement from that content and lands against the left
+# margin, breaking the page's right-to-left alignment. This anchors the paragraph direction
+# without printing anything.
+_RTL_MARK = "‏"
 
 
 def _isolate_ltr_runs(text: str) -> str:
@@ -184,15 +190,26 @@ def _isolate_ltr_runs(text: str) -> str:
 
     Placeholders are left alone: doc_utils isolates each substituted value itself, and wrapping
     the ``{{name}}`` token here would just nest the isolates.
+
+    The line is also prefixed with a right-to-left mark, so a paragraph that holds nothing but a
+    left-to-right value still sits against the right margin like the rest of the page.
     """
+    def isolate(segment: str) -> str:
+        # Only runs containing a number need fencing; a plain Latin word such as "HR Manager"
+        # is already strongly left-to-right and renders correctly inside Arabic on its own.
+        return _LTR_RUN_RE.sub(
+            lambda m: f"{_LTR_ISOLATE}{m.group(0)}{_POP_ISOLATE}"
+            if _DIGIT_RE.search(m.group(0)) else m.group(0),
+            segment,
+        )
+
     out, pos = [], 0
     for placeholder in _PLACEHOLDER_RE.finditer(text):
-        out.append(_LTR_RUN_RE.sub(lambda m: f"{_LTR_ISOLATE}{m.group(0)}{_POP_ISOLATE}",
-                                   text[pos:placeholder.start()]))
+        out.append(isolate(text[pos:placeholder.start()]))
         out.append(placeholder.group(0))
         pos = placeholder.end()
-    out.append(_LTR_RUN_RE.sub(lambda m: f"{_LTR_ISOLATE}{m.group(0)}{_POP_ISOLATE}", text[pos:]))
-    return "".join(out)
+    out.append(isolate(text[pos:]))
+    return _RTL_MARK + "".join(out)
 
 
 def _require_logo() -> Path:
@@ -209,6 +226,15 @@ def _set_bidi(paragraph, rtl: bool) -> None:
     placeholder, so run-level ``w:rtl`` would be lost. Direction has to live on the
     paragraph (``w:bidi``) and the formatting on the paragraph *style*, which the rebuilt
     runs inherit.
+
+    Alignment is deliberately NOT set. In a ``w:bidi`` paragraph ``w:jc`` is logical, not
+    physical: ``w:val="right"`` means "end", which in right-to-left text is the *left* edge.
+    Setting it to "right" therefore left-aligned the whole Arabic page — invisible on the long
+    wrapped paragraphs, which fill the column either way, but plain on the headings and on any
+    line holding only a date or the phone number. Leaving ``w:jc`` off falls back to "start",
+    which is the right edge for an RTL paragraph and the left edge for an LTR one — correct for
+    both pages, in Word and LibreOffice alike. Callers that genuinely want centring (the title,
+    the footer) set ``paragraph.alignment`` themselves afterwards.
     """
     p_pr = paragraph._p.get_or_add_pPr()
     for tag in ("w:bidi", "w:jc"):
@@ -217,9 +243,6 @@ def _set_bidi(paragraph, rtl: bool) -> None:
             p_pr.remove(existing)
     if rtl:
         p_pr.append(OxmlElement("w:bidi"))
-    jc = OxmlElement("w:jc")
-    jc.set(qn("w:val"), "right" if rtl else "left")
-    p_pr.append(jc)
 
 
 def _style(doc, name: str, *, size: int, bold: bool, rtl: bool, font: str = BODY_FONT):
