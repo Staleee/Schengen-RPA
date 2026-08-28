@@ -231,12 +231,27 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
             b[key] = block
             out[key] = block
 
-    # Marital status checkboxes
+    # §9 marital status. Only single and married used to be resolved here, and the else branch
+    # forced single=True — so pro-backend's marital_status_divorced / _widowed were discarded and
+    # a divorced or widowed applicant had "Single" ticked, asserting something untrue on a visa
+    # application. report_missing_options could not catch it either, because by that point the
+    # answer looked like "single". Each option is now resolved on its own, and single stays the
+    # default only when nothing at all is stated.
     marital = str(b.get("marital_status", "")).strip().lower()
-    if _truthy(b.get("marital_status_married")) or marital == "married":
-        out.update(marital_status_married=True, marital_status_single=False)
-    else:
-        out.update(marital_status_single=True, marital_status_married=False)
+    MARITAL_OPTIONS = (
+        ("marital_status_single", ("single", "unmarried")),
+        ("marital_status_married", ("married",)),
+        ("marital_status_divorced", ("divorced",)),
+        ("marital_status_widowed", ("widow", "widowed", "widower", "widow(er)")),
+        ("marital_status_separated", ("separated",)),
+        ("marital_status_registered_union", ("registered partnership", "registered union")),
+    )
+    chosen = next(
+        (key for key, words in MARITAL_OPTIONS if _truthy(b.get(key)) or marital in words),
+        "marital_status_single",  # nothing stated: the long-standing default for these forms
+    )
+    for key, _words in MARITAL_OPTIONS:
+        out[key] = key == chosen
 
     # Convenience aliases used by many country maps
     if _nonempty(b.get("maid_first_names")) and "given_names" not in out:
@@ -278,6 +293,28 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
         out["partner_address_email"] = "\n".join(x for x in (partner_addr, partner_email) if x)
     if partner_phone:
         out["partner_phone"] = partner_phone
+
+    # §34 "person filling in the application" — the same party as above (the client when they
+    # accompany the maid, otherwise the companion), but stated with their HOME address rather than
+    # the hotel address §30 uses.
+    #
+    # pro-backend only carries a home address for the client (client_erp_address); the companion
+    # record has a phone and an email and no address column at all. When a companion accompanies,
+    # the address half is therefore left out rather than filled with the hotel — §34 asks where
+    # the person lives, and printing an accommodation address there would be a false statement.
+    person_filling_addr = (
+        _nonempty(b.get("client_erp_address"))
+        if _truthy(b.get("client_is_travel_companion"))
+        else ""
+    )
+    if partner_name:
+        out["person_filling_form_name"] = partner_name
+    if person_filling_addr or partner_email:
+        out["person_filling_form_address_email"] = "\n".join(
+            x for x in (person_filling_addr, partner_email) if x
+        )
+    if partner_phone:
+        out["person_filling_form_phone"] = partner_phone
 
     # Main destination + any additional destination countries in one line.
     main_dest = _nonempty(b.get("main_destination")) or _nonempty(b.get("destination_member_state_line"))

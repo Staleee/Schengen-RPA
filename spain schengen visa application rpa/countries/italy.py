@@ -14,14 +14,18 @@ Two things about this template are unusual and shape the maps below.
 `Civil_status_Single` and the rest are 8-10pt Text widgets sitting over a printed ☐. They take a
 typed mark, so they go in ``mark_map`` rather than ``checkbox_map``.
 
-**Each option group carries only one option.** There is a field for Female but none for Male, one
-for Single but none for Married / Divorced / Widow / Registered partnership, one for Multiple
-entries but none for Single or Two, and one for Fingerprints-No but none for Yes. A box is
-therefore only marked when the answer is the one it states; any other answer leaves it blank and
-is reported by ``multi_country_fill.report_missing_options``, because marking it regardless would
-assert something untrue on a visa application. To cover those cases the template needs a field
-added per missing option (Sex_Male, Civil_status_Married, Civil_status_Divorced,
-Civil_status_Widow, Single_entry, Two_entries, Fingerprints_yes).
+**Most option groups carry only one option.** As shipped by ops the template had a field for
+Female but none for Male, one for Single but none for the other five civil statuses, one for
+Multiple entries but none for Single or Two, and one for Fingerprints-No but none for Yes. A box
+is only marked when the answer is the one it states; any other answer leaves it blank and is
+reported by ``multi_country_fill.report_missing_options``, because marking it regardless would
+assert something untrue on a visa application.
+
+§9 is now complete: ``Civil_status_Married``, ``_Divorced``, ``_Widow``, ``_Separated`` and
+``_Registered_partnership`` were added to the template as one-character Text widgets over their
+printed ☐, positioned by the same glyph-to-widget offset ``Civil_status_Single`` uses. The
+remaining gaps still need a field added per missing option: Sex_Male, Single_entry, Two_entries,
+Fingerprints_yes.
 
 The old blank overlay template (italy_conslagos.pdf) and italy_overlay.json are no longer used
 for Italy; the other overlay countries keep their own.
@@ -46,6 +50,10 @@ TEXT_MAP = {
     "residence_valid_until": "Residence_permit_valid_until",
     "occupation": "Current_occupation",
     "employer_sponsor_address": "Employer_name_address_telephone",
+    # §19 the applicant's own home address, email and telephone. applicant_address_email is
+    # composed from maid_address + maid_email by multi_country_fill.
+    "applicant_address_email": "Home_address_and_email",
+    "maid_phone": "Telephone_number",
     "purpose_additional_info": "Additional_information_purpose",
     "destination_member_states_line": "Main_destination_member_state",
     "first_entry_member_state": "First_entry_member_state",
@@ -56,12 +64,22 @@ TEXT_MAP = {
     "partner_phone": "Inviting_person_telephone",
     "place": "Declaration_place",
     "application_date": "Declaration_date",
+    # §34 the person filling in the application — the client when they accompany the maid,
+    # otherwise the companion.
+    "person_filling_form_name": "Person_filling_form_name",
+    "person_filling_form_address_email": "Person_filling_form_address_email",
+    "person_filling_form_phone": "Person_filling_form_telephone",
 }
 
 # Tick boxes: one-character text inputs, marked only when the answer matches the printed option.
 MARK_MAP = {
     "sex_female": "Sex_Female",
     "marital_status_single": "Civil_status_Single",
+    "marital_status_married": "Civil_status_Married",
+    "marital_status_divorced": "Civil_status_Divorced",
+    "marital_status_widowed": "Civil_status_Widow",
+    "marital_status_separated": "Civil_status_Separated",
+    "marital_status_registered_union": "Civil_status_Registered_partnership",
     "travel_doc_ordinary_passport": "Travel_doc_ordinary_passport",
     "resident_outside_nationality_yes": "Residence_in_other_country_yes",
     "purpose_tourism": "Purpose_tourism",
@@ -72,15 +90,13 @@ MARK_MAP = {
     "all_expenses_covered_during_stay": "Sponsor_means_all_expenses",
 }
 
-# §19 is the applicant's OWN address, email and phone, which ops leave blank on the submitted
-# form (same rule as the Spain template). §34 is only for a third party filling the form in.
-FORCE_EMPTY = (
-    "Home_address_and_email",
-    "Telephone_number",
-    "Person_filling_form_name",
-    "Person_filling_form_address_email",
-    "Person_filling_form_telephone",
-)
+# §19 and §34 used to be force-emptied here, on the rule that ops leave them blank on the
+# submitted form. Ops now want both stated, so they are mapped above instead.
+#
+# One half of §34 still cannot be filled: it asks for the person's HOME address, and pro-backend
+# carries one only for the client. When a companion rather than the client accompanies the maid,
+# multi_country_fill leaves the address out and prints the email alone — see the note there.
+FORCE_EMPTY: tuple[str, ...] = ()
 
 register_country(
     "italy",

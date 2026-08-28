@@ -10,11 +10,14 @@ Two things about that template shape these checks.
 **Every tick box is a one-character text input**, not a checkbox: 8-10pt Text widgets sitting over
 a printed ☐, which take a typed mark.
 
-**Each option group carries only one option** — Female but not Male, Single but not Married /
-Divorced / Widow, Multiple entries but not Single or Two, Fingerprints-No but not Yes. A box is
-only marked when the answer is the one it states, so the "married" case below asserts that
-Civil_status_Single stays BLANK and that the service reports the gap. Marking it anyway would
-state something untrue on a visa application.
+**Some option groups still carry only one option** — Female but not Male, Multiple entries but not
+Single or Two, Fingerprints-No but not Yes. A box is only marked when the answer is the one it
+states, so the two-entries case below asserts that Multiple_entries stays BLANK and that the
+service reports the gap. Marking it anyway would state something untrue on a visa application.
+
+§9 is complete: a box was added per civil status, so the married, divorced and widowed cases below
+assert their own box is ticked and that Single is not. The merge used to force single for anything
+that was not married, which is exactly what those cases catch.
 
 Run via tests/docker-compose.yml, or against a running service with
 RPA_BASE_URL=http://localhost:8090 python tests/verify_italy.py
@@ -68,6 +71,14 @@ EXPECTED_TEXT = {
     "Inviting_person_telephone": "+971509998877",
     # The declaration block was not wired under the overlay.
     "Declaration_place": "United Arab Emirates",
+    # §19 the applicant's own address, email and phone. Force-emptied until ops asked for them.
+    "Home_address_and_email": "Villa 12, Al Barsha 2, Dubai\nnorhaina@example.ae",
+    "Telephone_number": "+971501112233",
+    # §34 the person filling in the application: the client here, since they accompany the maid.
+    # Their HOME address, not the hotel address §30 carries.
+    "Person_filling_form_name": "Heba Ragaei Youssef",
+    "Person_filling_form_address_email": "Apt 903, Marina Gate 1, Dubai\ndev@teljoy.io",
+    "Person_filling_form_telephone": "+971509998877",
 }
 
 # Fields that must be non-empty but whose exact text is not asserted.
@@ -90,15 +101,8 @@ EXPECTED_MARKS = (
     "Sponsor_means_all_expenses",
 )
 
-# §19 is the applicant's own address, email and phone — blank on the submitted form, same rule as
-# the Spain template. §34 is only for a third party filling the form in.
-EXPECTED_BLANK = (
-    "Home_address_and_email",
-    "Telephone_number",
-    "Person_filling_form_name",
-    "Person_filling_form_address_email",
-    "Person_filling_form_telephone",
-)
+# Nothing is force-emptied on this form any more; §19 and §34 are asserted above.
+EXPECTED_BLANK: tuple[str, ...] = ()
 
 PAYLOAD: Dict[str, object] = {
     "country": "italy",
@@ -136,6 +140,10 @@ PAYLOAD: Dict[str, object] = {
     "client_email": "dev@teljoy.io",
     "client_is_travel_companion": True,
     "client_hotel_address": "Italy: milan",
+    "client_erp_address": "Apt 903, Marina Gate 1, Dubai",
+    "maid_address": "Villa 12, Al Barsha 2, Dubai",
+    "maid_email": "norhaina@example.ae",
+    "maid_phone": "+971501112233",
     "schengen_visa_before": "no",
 }
 
@@ -223,7 +231,10 @@ def main() -> int:
         f"fontsize={sizes.get('Main_destination_member_state')}",
     )
 
-    # The form has no Married box, so it must stay blank AND be reported, never mis-ticked.
+    # §9 now carries a box per civil status, so a married applicant ticks Married and only Married.
+    failures += _check("Civil_status_Married ticked for a married applicant",
+                       values.get("Civil_status_Married") == MARK,
+                       f"got {values.get('Civil_status_Married')!r}")
     failures += _check("Civil_status_Single blank for a married applicant",
                        not values.get("Civil_status_Single"),
                        f"got {values.get('Civil_status_Single')!r}")
@@ -234,9 +245,44 @@ def main() -> int:
     from multi_country_fill import COUNTRY_CONFIGS, merge_schengen_common_body, report_missing_options
 
     gaps = report_missing_options(COUNTRY_CONFIGS["italy"], merge_schengen_common_body(dict(PAYLOAD)))
-    for expected in ("marital status=marital_status_married", "entries=entries_two"):
-        failures += _check(f"reported: {expected}", expected in gaps,
-                           "" if expected in gaps else f"report was {list(gaps)}")
+    failures += _check("reported: entries=entries_two", "entries=entries_two" in gaps,
+                       "" if "entries=entries_two" in gaps else f"report was {list(gaps)}")
+    failures += _check("marital status no longer reported as a gap",
+                       not any(g.startswith("marital status=") for g in gaps),
+                       f"report was {list(gaps)}")
+
+    # The merge used to force single=True for anything that was not "married", so a divorced or
+    # widowed applicant had Single ticked — an untrue statement, and one report_missing_options
+    # could not see because by then the answer looked like "single".
+    for status, box in (("divorced", "Civil_status_Divorced"), ("widow", "Civil_status_Widow")):
+        other = OUT_DIR / f"italy-application-{status}.pdf"
+        other.write_bytes(_fill(dict(PAYLOAD, marital_status=status)))
+        other_values, _ = _values(other)
+        failures += _check(f"{box} ticked for a {status} applicant",
+                           other_values.get(box) == MARK,
+                           f"got {other_values.get(box)!r}")
+        failures += _check(f"Civil_status_Single blank for a {status} applicant",
+                           not other_values.get("Civil_status_Single"),
+                           f"got {other_values.get('Civil_status_Single')!r}")
+
+    # §34 with a companion rather than the client accompanying: pro-backend has no home address for
+    # a companion, so the address half is omitted and the email stands alone. The hotel address
+    # must not be substituted — §34 asks where the person lives.
+    comp = OUT_DIR / "italy-application-companion.pdf"
+    comp.write_bytes(_fill(dict(
+        PAYLOAD,
+        client_is_travel_companion=False,
+        companion_name="Karim Ragaei Youssef",
+        companion_email="karim@example.ae",
+        companion_phone="+971507776655",
+    )))
+    comp_values, _ = _values(comp)
+    failures += _check("§34 name is the companion",
+                       comp_values.get("Person_filling_form_name") == "Karim Ragaei Youssef",
+                       f"got {comp_values.get('Person_filling_form_name')!r}")
+    failures += _check("§34 address/email is the email alone",
+                       comp_values.get("Person_filling_form_address_email") == "karim@example.ae",
+                       f"got {comp_values.get('Person_filling_form_address_email')!r}")
 
     # A single applicant must actually tick Single, or the mark map is wired the wrong way round.
     single = OUT_DIR / "italy-application-single.pdf"
