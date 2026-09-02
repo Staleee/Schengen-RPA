@@ -265,9 +265,10 @@ def main() -> int:
                            not other_values.get("Civil_status_Single"),
                            f"got {other_values.get('Civil_status_Single')!r}")
 
-    # §34 with a companion rather than the client accompanying: pro-backend has no home address for
-    # a companion, so the address half is omitted and the email stands alone. The hotel address
-    # must not be substituted — §34 asks where the person lives.
+    # §34 with a companion rather than the client accompanying. pro-backend now sends the
+    # companion's own home address as companion_home_address, so both halves print. Neither the
+    # hotel address nor the CLIENT's home address may be substituted — §34 asks where this
+    # person lives, and either would state something untrue.
     comp = OUT_DIR / "italy-application-companion.pdf"
     comp.write_bytes(_fill(dict(
         PAYLOAD,
@@ -275,14 +276,44 @@ def main() -> int:
         companion_name="Karim Ragaei Youssef",
         companion_email="karim@example.ae",
         companion_phone="+971507776655",
+        companion_home_address="Flat 4, Al Nahda 2, Sharjah",
     )))
     comp_values, _ = _values(comp)
     failures += _check("§34 name is the companion",
                        comp_values.get("Person_filling_form_name") == "Karim Ragaei Youssef",
                        f"got {comp_values.get('Person_filling_form_name')!r}")
-    failures += _check("§34 address/email is the email alone",
-                       comp_values.get("Person_filling_form_address_email") == "karim@example.ae",
+    failures += _check("§34 is the companion's home address and email",
+                       comp_values.get("Person_filling_form_address_email")
+                       == "Flat 4, Al Nahda 2, Sharjah\nkarim@example.ae",
                        f"got {comp_values.get('Person_filling_form_address_email')!r}")
+
+    # Without a companion_home_address the address half must stay out rather than fall back to
+    # the client's — this is the old behaviour, and it is still the correct one.
+    comp_noaddr = OUT_DIR / "italy-application-companion-no-address.pdf"
+    comp_noaddr.write_bytes(_fill(dict(
+        PAYLOAD,
+        client_is_travel_companion=False,
+        companion_name="Karim Ragaei Youssef",
+        companion_email="karim@example.ae",
+        companion_phone="+971507776655",
+    )))
+    comp_noaddr_values, _ = _values(comp_noaddr)
+    failures += _check("§34 falls back to the email alone with no companion home address",
+                       comp_noaddr_values.get("Person_filling_form_address_email") == "karim@example.ae",
+                       f"got {comp_noaddr_values.get('Person_filling_form_address_email')!r}")
+
+    # When the client accompanies, an agent-corrected companion_home_address outranks the address
+    # seeded from their ERP record.
+    client_edited = OUT_DIR / "italy-application-client-edited-address.pdf"
+    client_edited.write_bytes(_fill(dict(
+        PAYLOAD,
+        companion_home_address="Villa 7, Jumeirah 1, Dubai",
+    )))
+    client_edited_values, _ = _values(client_edited)
+    failures += _check("§34 prefers the edited home address over client_erp_address",
+                       client_edited_values.get("Person_filling_form_address_email")
+                       == "Villa 7, Jumeirah 1, Dubai\ndev@teljoy.io",
+                       f"got {client_edited_values.get('Person_filling_form_address_email')!r}")
 
     # A single applicant must actually tick Single, or the mark map is wired the wrong way round.
     single = OUT_DIR / "italy-application-single.pdf"

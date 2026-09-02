@@ -93,9 +93,9 @@ MARK_MAP = {
 # §19 and §34 used to be force-emptied here, on the rule that ops leave them blank on the
 # submitted form. Ops now want both stated, so they are mapped above instead.
 #
-# One half of §34 still cannot be filled: it asks for the person's HOME address, and pro-backend
-# carries one only for the client. When a companion rather than the client accompanies the maid,
-# multi_country_fill leaves the address out and prints the email alone — see the note there.
+# §34 is complete now that pro-backend sends companion_home_address, the workflow's "Companion
+# Address", for whichever party accompanies the maid. It used to have a home address only for the
+# client, so an external companion printed the email alone — see the note in multi_country_fill.
 FORCE_EMPTY: tuple[str, ...] = ()
 
 register_country(

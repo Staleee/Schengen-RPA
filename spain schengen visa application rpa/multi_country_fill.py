@@ -298,15 +298,17 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     # accompany the maid, otherwise the companion), but stated with their HOME address rather than
     # the hotel address §30 uses.
     #
-    # pro-backend only carries a home address for the client (client_erp_address); the companion
-    # record has a phone and an email and no address column at all. When a companion accompanies,
-    # the address half is therefore left out rather than filled with the hotel — §34 asks where
-    # the person lives, and printing an accommodation address there would be a false statement.
-    person_filling_addr = (
-        _nonempty(b.get("client_erp_address"))
-        if _truthy(b.get("client_is_travel_companion"))
-        else ""
-    )
+    # companion_home_address is the workflow's "Companion Address" and describes whichever party
+    # accompanies, so it wins over client_erp_address: when the client accompanies it is seeded
+    # from their ERP record but an agent may since have corrected it. It is deliberately not
+    # named companion_address — spain_merge already uses that key for the companion's hotel.
+    # The hotel address is never substituted here: §34 asks where the person lives, and printing
+    # an accommodation address there would be a false statement.
+    companion_home = _nonempty(b.get("companion_home_address"))
+    if _truthy(b.get("client_is_travel_companion")):
+        person_filling_addr = companion_home or _nonempty(b.get("client_erp_address"))
+    else:
+        person_filling_addr = companion_home
     if partner_name:
         out["person_filling_form_name"] = partner_name
     if person_filling_addr or partner_email:
