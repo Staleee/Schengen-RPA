@@ -4,13 +4,18 @@ Uses python-docx so the output is always a valid .docx that Word opens without e
 """
 
 import copy
+import io
 import re
+import urllib.request
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from docx import Document
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.shared import Pt
+from docx.text.paragraph import Paragraph
 
 # XML 1.0 invalid control chars (only \t \n \r are allowed in content)
 _INVALID_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ufffe\uffff]")
@@ -255,6 +260,86 @@ def _replace_embassy_block_with_addressee(
         return  # Only replace the first match.
 
 
+# Rendered width of the signature / company-stamp images inserted around the signatory line.
+_SIGNATURE_IMAGE_WIDTH_PT = 140
+_STAMP_IMAGE_WIDTH_PT = 110
+
+# Bidi control characters the Arabic page wraps around left-to-right runs (RTL/LTR marks and
+# isolates). Stripped only when matching the signatory paragraph by text.
+_BIDI_MARKS_RE = re.compile(r"[\u200e\u200f\u2066\u2067\u2068\u2069]")
+
+
+def _strip_bidi_marks(text: str) -> str:
+    return _BIDI_MARKS_RE.sub("", text)
+
+
+def _download_image_bytes(url: str) -> Optional[bytes]:
+    """Fetch an image URL and return its bytes, or None on any failure.
+
+    A blank URL, network error, or non-image payload all resolve to None so the document
+    still renders (text-only signatory) instead of failing generation.
+    """
+    url = (url or "").strip()
+    if not url:
+        return None
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "documents-generation/1.0"})
+        with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - operator-configured URL
+            data = response.read()
+        if not data:
+            return None
+        # Confirm python-docx / Pillow can actually decode it before embedding.
+        from PIL import Image
+
+        Image.open(io.BytesIO(data)).verify()
+        return data
+    except Exception:
+        return None
+
+
+def _all_body_paragraphs(doc) -> List:
+    """Every paragraph in the document body, including those inside table cells."""
+    out = list(doc.paragraphs)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                out.extend(cell.paragraphs)
+    return out
+
+
+def _insert_signatory_images(doc, normalized: Dict[str, str]) -> None:
+    """Embed the signature image above, and the company stamp below, the signatory line.
+
+    The signatory paragraph is the one whose (already substituted) text equals
+    ``signatory_name`` — both the English and Arabic pages of the maid NOC carry it, so images
+    are added to every match. Missing/blank URLs or an empty signatory name are silent no-ops.
+    """
+    signature_bytes = _download_image_bytes(normalized.get("signature_image_url", ""))
+    stamp_bytes = _download_image_bytes(normalized.get("stamp_image_url", ""))
+    if not signature_bytes and not stamp_bytes:
+        return
+    name = _strip_bidi_marks(normalized.get("signatory_name", "") or "").strip()
+    if not name:
+        return
+
+    targets = [
+        para
+        for para in _all_body_paragraphs(doc)
+        if _strip_bidi_marks("".join(run.text for run in para.runs)).strip() == name
+    ]
+    for target in targets:
+        if signature_bytes:
+            before = target.insert_paragraph_before()
+            before.alignment = target.alignment
+            before.add_run().add_picture(io.BytesIO(signature_bytes), width=Pt(_SIGNATURE_IMAGE_WIDTH_PT))
+        if stamp_bytes:
+            stamp_element = OxmlElement("w:p")
+            target._p.addnext(stamp_element)
+            after = Paragraph(stamp_element, target._parent)
+            after.alignment = target.alignment
+            after.add_run().add_picture(io.BytesIO(stamp_bytes), width=Pt(_STAMP_IMAGE_WIDTH_PT))
+
+
 def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) -> List[str]:
     """
     Replace {{variable_name}} placeholders using python-docx. Output is always a valid
@@ -451,6 +536,9 @@ def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) 
         for block in (section.header, section.footer, section.first_page_header, section.first_page_footer, getattr(section, "even_page_header", None), getattr(section, "even_page_footer", None)):
             if block is not None:
                 process_block(block.paragraphs, getattr(block, "tables", []))
+
+    # Embed the signature + company-stamp images around the signatory line (if URLs supplied).
+    _insert_signatory_images(doc, normalized)
 
     doc.save(str(output_path))
     return filled

@@ -119,7 +119,9 @@ ENGLISH_BODY = [
     ),
     ("s", ""),
     ("h", "Respectfully submitted,"),
-    ("b", "HR Manager"),
+    # Signatory title comes from the request (DOC_SIGNATORY_NAME, default "HR Manager"); the
+    # optional signature + company-stamp images are inserted around this line at fill time.
+    ("b", "{{signatory_name}}"),
     ("b", "+971 505544143"),
 ]
 
@@ -162,7 +164,7 @@ ARABIC_BODY = [
     ),
     ("s", ""),
     ("h", "مع خالص الاحترام،"),
-    ("b", "HR Manager"),
+    ("b", "{{signatory_name}}"),
     ("b", "+971 505544143"),
 ]
 

@@ -61,13 +61,17 @@ MARITAL_BOXES = {
     "divorced": "ChkBox-1",
     "widowed": "ChkBox-2",
 }
-# Must come out blank: the applicant's own address/email and her phone.
-MUST_BE_BLANK = {
+# Ops leave these blank on the submitted Spain form.
+MUST_BE_BLANK: Dict[str, str] = {
+    "32 company line": "32 Nombre y dirección de la empresa u organización",
+}
+# Must stay filled: §19 applicant address/email + phone (row 22) and the §31 host phone (a
+# different widget that happens to share a label).
+MUST_BE_FILLED = {
     "19 address + email": "Texto18",
     "19 phone": "Números de teléfonoTelephone numbers",
+    "31 host phone": "Números de teléfonoTelephone numbers-0",
 }
-# Must stay filled: the §31 host phone is a different widget that happens to share a label.
-MUST_BE_FILLED = {"31 host phone": "Números de teléfonoTelephone numbers-0"}
 FIELD_20_RADIO = "20 Residente en un país distinto del país de nacio"
 
 # A complete profile, shaped like pro-backend's buildBlsVisa body.

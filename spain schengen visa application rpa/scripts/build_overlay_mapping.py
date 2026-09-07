@@ -54,6 +54,8 @@ TEXT_FIELDS = [
     ("departure_date",          "Intended date of departure",   "below", False),
     ("partner_name",            "inviting",                     "below", True),
     ("partner_address_email",   "mail address of inviting",     "below", True),
+    # Signature block: "Place and date" is a unique label; the value sits to its right.
+    ("place_and_date",          "Place and date",               "right", False),
 ]
 
 # (key, option-label substring). The tick box is the ☐ glyph just left of the option label.
@@ -84,9 +86,47 @@ SPECS = {
 # Per-form, per-key spec overrides merged on top of the auto-computed spec. Use for cramped cells
 # or duplicate labels where the auto cell is wrong. Values are partial specs (rect / mode / etc.).
 OVERRIDES: dict = {
-    "portugal": {},
-    "greece": {},
+    "portugal": {
+        # §19 telephone (right of "Telephone no." on the home-address line).
+        "maid_phone":              {"page": 2, "rect": [404.0, 375.0, 505.0, 389.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        # §20 residence permit — value after "No." up to "Valid until", then after "Valid until".
+        "residence_number":        {"page": 2, "rect": [293.0, 432.0, 338.0, 446.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
+        "residence_valid_until":   {"page": 2, "rect": [384.0, 432.0, 470.0, 446.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
+        # §29 previous Schengen visa: "No ☐  Yes ☐" — first box = No, second = Yes.
+        "schengen_before_no":      {"page": 3, "check": True, "box": [92.0, 101.5, 99.0, 108.5]},
+        "schengen_before_yes":     {"page": 3, "check": True, "box": [115.0, 101.5, 122.0, 108.5]},
+        # §31 host telephone (right of the §30/31 "Telephone No" on the inviting-person line).
+        "partner_phone":           {"page": 3, "rect": [312.0, 245.0, 470.0, 259.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        # §20 residence "Yes" tick (the number/validity render on the dotted line beside it).
+        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [69.0, 432.0, 76.0, 439.0]},
+        # §34 person filling in the form (the sponsor block): companion name, address+email, phone.
+        "person_filling_form_name":          {"page": 3, "rect": [72.0, 612.0, 340.0, 625.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "person_filling_form_address_email": {"page": 3, "rect": [72.0, 662.0, 300.0, 690.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
+        "person_filling_form_phone":         {"page": 3, "rect": [312.0, 634.0, 470.0, 648.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+    },
+    "greece": {
+        "maid_phone":              {"page": 2, "rect": [404.0, 403.0, 505.0, 417.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "residence_number":        {"page": 2, "rect": [293.0, 460.0, 338.0, 474.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
+        "residence_valid_until":   {"page": 2, "rect": [384.0, 460.0, 470.0, 474.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
+        "schengen_before_no":      {"page": 3, "check": True, "box": [93.0, 101.5, 100.0, 108.5]},
+        "schengen_before_yes":     {"page": 3, "check": True, "box": [116.0, 101.5, 123.0, 108.5]},
+        "partner_phone":           {"page": 3, "rect": [312.0, 245.0, 470.0, 259.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [68.0, 460.0, 75.0, 467.0]},
+        "person_filling_form_name":          {"page": 3, "rect": [72.0, 596.0, 340.0, 609.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "person_filling_form_address_email": {"page": 3, "rect": [72.0, 635.0, 300.0, 662.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
+        "person_filling_form_phone":         {"page": 3, "rect": [312.0, 607.0, 470.0, 621.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+    },
     "bulgaria": {
+        "maid_phone":              {"page": 2, "rect": [424.0, 442.0, 545.0, 458.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "residence_number":        {"page": 2, "rect": [361.0, 517.0, 480.0, 533.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
+        "residence_valid_until":   {"page": 2, "rect": [123.0, 533.0, 300.0, 549.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
+        "schengen_before_no":      {"page": 3, "check": True, "box": [170.0, 274.5, 177.0, 281.5]},
+        "schengen_before_yes":     {"page": 3, "check": True, "box": [200.0, 274.5, 207.0, 281.5]},
+        "partner_phone":           {"page": 3, "rect": [312.0, 441.0, 470.0, 457.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [68.0, 517.0, 75.0, 524.0]},
+        "person_filling_form_name":          {"page": 4, "rect": [72.0, 336.0, 400.0, 350.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "person_filling_form_address_email": {"page": 4, "rect": [72.0, 402.0, 320.0, 428.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
+        "person_filling_form_phone":         {"page": 4, "rect": [332.0, 347.0, 480.0, 363.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
         # Field 30: "inviting" appears in both the name label and the address sub-label with
         # justified 4-line wrapping, so pin both values explicitly. Name -> trailing blank of the
         # label's last line; address+email -> blank area below the address sub-label block.

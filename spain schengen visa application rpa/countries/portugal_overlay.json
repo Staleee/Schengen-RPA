@@ -261,6 +261,18 @@
   "min_fontsize": 6.0,
   "multiline": true
  },
+ "place_and_date": {
+  "page": 4,
+  "rect": [
+   130.5,
+   535.6,
+   339.8,
+   549.2
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 9.0
+ },
  "sex_male": {
   "page": 1,
   "check": true,
@@ -380,5 +392,121 @@
    264.5,
    467.6
   ]
+ },
+ "maid_phone": {
+  "page": 2,
+  "rect": [
+   404.0,
+   375.0,
+   505.0,
+   389.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 8.5
+ },
+ "residence_number": {
+  "page": 2,
+  "rect": [
+   293.0,
+   432.0,
+   338.0,
+   446.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 8.0
+ },
+ "residence_valid_until": {
+  "page": 2,
+  "rect": [
+   384.0,
+   432.0,
+   470.0,
+   446.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 8.0
+ },
+ "schengen_before_no": {
+  "page": 3,
+  "check": true,
+  "box": [
+   92.0,
+   101.5,
+   99.0,
+   108.5
+  ]
+ },
+ "schengen_before_yes": {
+  "page": 3,
+  "check": true,
+  "box": [
+   115.0,
+   101.5,
+   122.0,
+   108.5
+  ]
+ },
+ "partner_phone": {
+  "page": 3,
+  "rect": [
+   312.0,
+   245.0,
+   470.0,
+   259.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 8.5
+ },
+ "resident_outside_nationality_yes": {
+  "page": 2,
+  "check": true,
+  "box": [
+   69.0,
+   432.0,
+   76.0,
+   439.0
+  ]
+ },
+ "person_filling_form_name": {
+  "page": 3,
+  "rect": [
+   72.0,
+   612.0,
+   340.0,
+   625.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 8.5
+ },
+ "person_filling_form_address_email": {
+  "page": 3,
+  "rect": [
+   72.0,
+   662.0,
+   300.0,
+   690.0
+  ],
+  "align": "left",
+  "valign": "top",
+  "fontsize": 8.0,
+  "min_fontsize": 6.0,
+  "multiline": true
+ },
+ "person_filling_form_phone": {
+  "page": 3,
+  "rect": [
+   312.0,
+   634.0,
+   470.0,
+   648.0
+  ],
+  "align": "left",
+  "valign": "bottom",
+  "fontsize": 8.5
  }
 }

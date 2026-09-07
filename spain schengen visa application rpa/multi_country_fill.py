@@ -350,9 +350,11 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     from datetime import date as _date
 
     today = _date.today().strftime("%d/%m/%Y")
+    # Applications are filed in Dubai (Tourist Visa issues rows 18/43); pro-backend also sends
+    # this, but keep the fallback consistent for any caller that omits it.
     if not _nonempty(out.get("place_and_date")):
-        out["place_and_date"] = f"United Arab Emirates, {today}"
-    out.setdefault("place", "United Arab Emirates")
+        out["place_and_date"] = f"Dubai, {today}"
+    out.setdefault("place", "Dubai")
     out.setdefault("application_date", today)
 
     return out

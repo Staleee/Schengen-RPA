@@ -363,6 +363,104 @@ def _generate_travel_noc(body: Dict[str, Any], format: Optional[str], document_t
     return Response(content=content, media_type=media_type, headers=headers)
 
 
+@app.post("/replace-signatory")
+async def replace_signatory(body: Dict[str, Any]):
+    """Redact hardcoded individual signatory name(s) from an existing PDF and stamp the
+    configured signatory (e.g. "HR Manager") in their place.
+
+    Interim post-processor for the Turkey Certificate of Employment / Salary Statement PDFs
+    produced by the ERP client-module document generator, which still print an individual
+    officer's name. The stamp/signature images are already suppressed upstream
+    (ignoreStampAndSignature=true), so this only fixes the printed name.
+
+    Request body (JSON):
+      - content_base64 (required): the source PDF, base64-encoded.
+      - find (list[str] | str): the individual name(s) to redact. When empty, the PDF is
+        returned unchanged.
+      - signatory_name (str): replacement text stamped at the first redacted location
+        (default "HR Manager").
+      - format=json (optional): return a base64 JSON envelope instead of raw PDF bytes.
+
+    Returns: application/pdf bytes (or a {filename, content_type, content_base64} JSON envelope).
+    """
+    import pymupdf
+
+    content_b64 = body.get("content_base64") or body.get("content") or body.get("pdf")
+    if not content_b64 or not isinstance(content_b64, str):
+        raise HTTPException(status_code=422, detail="content_base64 (base64 PDF) is required.")
+    try:
+        pdf_bytes = base64.b64decode(content_b64)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"content_base64 is not valid base64: {exc}")
+    if not pdf_bytes.startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail="content_base64 does not decode to a PDF.")
+
+    raw_find = body.get("find")
+    if isinstance(raw_find, str):
+        names = [raw_find]
+    elif isinstance(raw_find, list):
+        names = [str(n) for n in raw_find]
+    else:
+        names = []
+    names = [n.strip() for n in names if n and n.strip()]
+
+    signatory_name = str(body.get("signatory_name") or "HR Manager").strip()
+
+    fmt = body.get("format")
+    want_json = isinstance(fmt, str) and fmt.lower() == "json"
+
+    if not names:
+        # Nothing to redact — return the input unchanged so callers stay simple.
+        out_bytes = pdf_bytes
+    else:
+        try:
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Could not open PDF: {exc}")
+
+        anchor: Optional[tuple] = None  # (page_index, rect)
+        for page in doc:
+            for name in names:
+                for rect in page.search_for(name):
+                    if anchor is None:
+                        anchor = (page.number, pymupdf.Rect(rect))
+                    page.add_redact_annot(rect, fill=(1, 1, 1))
+            page.apply_redactions()
+
+        # Stamp the replacement signatory at the first redacted location.
+        if anchor is not None and signatory_name:
+            page = doc[anchor[0]]
+            rect = anchor[1]
+            # Grow the box a little so the (often longer) title is not clipped.
+            box = pymupdf.Rect(rect.x0, rect.y0, rect.x1 + 220, rect.y1 + 6)
+            fontsize = max(8.0, min(12.0, rect.height * 0.9)) if rect.height else 11.0
+            page.insert_textbox(
+                box, signatory_name, fontname="helv", fontsize=fontsize, align=0
+            )
+
+        out_bytes = doc.tobytes()
+        doc.close()
+        if not out_bytes.startswith(b"%PDF"):
+            raise HTTPException(status_code=500, detail="replace-signatory produced invalid PDF.")
+
+    filename = "signatory_replaced.pdf"
+    if want_json:
+        return {
+            "filename": filename,
+            "content_type": PDF_MEDIA,
+            "content_base64": base64.b64encode(out_bytes).decode("ascii"),
+        }
+    return Response(
+        content=out_bytes,
+        media_type=PDF_MEDIA,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(out_bytes)),
+            "Cache-Control": "no-transform",
+        },
+    )
+
+
 @app.post("/generate-affidavit")
 async def generate_affidavit(
     body: Dict[str, Any],

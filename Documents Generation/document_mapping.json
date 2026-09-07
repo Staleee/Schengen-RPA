@@ -47,10 +47,14 @@
     "companion_salutation_name": "{{companion_salutation_name}}",
     "companion_name": "{{companion_name}}",
     "companion_nationality": "{{companion_nationality}}",
+    "companion_gender": "{{companion_gender}}",
     "companion_passport_number": "{{companion_passport_number}}",
     "visa_type": "{{visa_type}}",
     "family_suffix": "{{family_suffix}}",
-    "stay_line": "{{stay_line}}"
+    "stay_line": "{{stay_line}}",
+    "signatory_name": "{{signatory_name}}",
+    "signature_image_url": "{{signature_image_url}}",
+    "stamp_image_url": "{{stamp_image_url}}"
   },
   "noc-turkey": {
     "date_issued": "{{date_issued}}",
@@ -71,7 +75,10 @@
     "annual_salary": "{{annual_salary}}",
     "trip_purpose": "{{trip_purpose}}",
     "travel_start_date": "{{travel_start_date}}",
-    "travel_end_date": "{{travel_end_date}}"
+    "travel_end_date": "{{travel_end_date}}",
+    "signatory_name": "{{signatory_name}}",
+    "signature_image_url": "{{signature_image_url}}",
+    "stamp_image_url": "{{stamp_image_url}}"
   },
   "noc-schengen": {
     "date_issued": "{{date_issued}}",
@@ -92,7 +99,10 @@
     "annual_salary": "{{annual_salary}}",
     "trip_purpose": "{{trip_purpose}}",
     "travel_start_date": "{{travel_start_date}}",
-    "travel_end_date": "{{travel_end_date}}"
+    "travel_end_date": "{{travel_end_date}}",
+    "signatory_name": "{{signatory_name}}",
+    "signature_image_url": "{{signature_image_url}}",
+    "stamp_image_url": "{{stamp_image_url}}"
   },
   "affidavit": {
     "maid_name": "{{maid-name}}",

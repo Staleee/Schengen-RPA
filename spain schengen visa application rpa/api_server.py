@@ -146,13 +146,27 @@ async def fill_pdf(body: FillPdfRequest):
 
     structured = _request_to_dict(body)
     country = _resolve_request_country(structured)
+    normalized_country = country.strip().lower() if country else ""
     try:
-        if country and country.strip().lower() not in _SPAIN_ALIASES and has_country(country):
+        if normalized_country and normalized_country not in _SPAIN_ALIASES:
+            # A specific non-Spain country was requested. It MUST have a registered template —
+            # otherwise fail loudly instead of silently emitting a Spain form (Tourist Visa issues
+            # row 53: Croatia used to render as Spain). Croatia is filed via its web portal, not here.
+            if not has_country(country):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"No visa-application template is configured for country '{country}'. "
+                        f"Supported: {', '.join(supported_countries())}, plus Spain. "
+                        f"(Croatia is filed through its web portal, not this service.)"
+                    ),
+                )
             # Additional Schengen countries: per-country template + field map.
             pdf_bytes = fill_country_pdf(country, structured, body.pdf_fields)
-            filename = f"{country.strip().lower().replace(' ', '_')}_schengen_application_filled.pdf"
+            filename = f"{normalized_country.replace(' ', '_')}_schengen_application_filled.pdf"
         else:
-            # Default: Spain (production-tested path, unchanged).
+            # Default: Spain (production-tested path, unchanged) — only when no country is given
+            # or the country is Spain.
             pdf_bytes = fill_spain_schengen_pdf(
                 structured,
                 body.pdf_fields,

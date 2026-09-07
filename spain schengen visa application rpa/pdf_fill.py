@@ -96,9 +96,10 @@ SPONSOR_PHONE_PDF = "Número de teléfono  Phone number"
 # Printed “32” (company name/address) — leave blank per ops; not the same as generic `Texto32`.
 FIELD_32_COMPANY_LINE = "32 Nombre y dirección de la empresa u organización"
 
-# Printed “19” (the applicant's own home address + email, and her phone number) — both boxes
-# stay blank per ops. Note the phone here is the page-2 maid phone; the §31 host phone is the
-# distinct `…-0` field above and is still filled.
+# Printed “19” (the applicant's own home address + email, and her phone number). Ops now require
+# these populated (Tourist Visa issues row 22): the home address falls back to the client's
+# address for a live-in maid, and the phone here is the page-2 maid phone. The §31 host phone is
+# the distinct `…-0` field and is filled independently.
 FIELD_19_ADDRESS_EMAIL = "Texto18"
 FIELD_19_PHONE = "Números de teléfonoTelephone numbers"
 
@@ -107,8 +108,6 @@ FORCE_EMPTY_UNLESS_PDF_FIELDS: Tuple[str, ...] = (
     "Texto17",
     "Texto27",
     FIELD_32_COMPANY_LINE,
-    FIELD_19_ADDRESS_EMAIL,
-    FIELD_19_PHONE,
 )
 
 # Printed “20” (resident of a country other than the country of current nationality) is a RADIO
