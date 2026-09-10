@@ -288,11 +288,20 @@ def _download_image_bytes(url: str) -> Optional[bytes]:
             data = response.read()
         if not data:
             return None
-        # Confirm python-docx / Pillow can actually decode it before embedding.
+        # Re-encode to PNG before embedding. Pillow decodes formats that python-docx cannot
+        # embed (WebP, HEIC, ...); returning those raw bytes passes this download step but then
+        # crashes add_picture with UnrecognizedImageError, 500-ing generation. Normalizing to
+        # PNG here guarantees python-docx can embed whatever the operator uploaded, and preserves
+        # transparency for stamps/signatures.
         from PIL import Image
 
-        Image.open(io.BytesIO(data)).verify()
-        return data
+        img = Image.open(io.BytesIO(data))
+        img.load()
+        if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
+            img = img.convert("RGBA")
+        out = io.BytesIO()
+        img.save(out, format="PNG")
+        return out.getvalue()
     except Exception:
         return None
 
@@ -328,16 +337,24 @@ def _insert_signatory_images(doc, normalized: Dict[str, str]) -> None:
         if _strip_bidi_marks("".join(run.text for run in para.runs)).strip() == name
     ]
     for target in targets:
+        # A failed embed must never abort document generation — fall back to a text-only
+        # signatory, the same contract _download_image_bytes already honours for bad URLs.
         if signature_bytes:
-            before = target.insert_paragraph_before()
-            before.alignment = target.alignment
-            before.add_run().add_picture(io.BytesIO(signature_bytes), width=Pt(_SIGNATURE_IMAGE_WIDTH_PT))
+            try:
+                before = target.insert_paragraph_before()
+                before.alignment = target.alignment
+                before.add_run().add_picture(io.BytesIO(signature_bytes), width=Pt(_SIGNATURE_IMAGE_WIDTH_PT))
+            except Exception:
+                pass
         if stamp_bytes:
-            stamp_element = OxmlElement("w:p")
-            target._p.addnext(stamp_element)
-            after = Paragraph(stamp_element, target._parent)
-            after.alignment = target.alignment
-            after.add_run().add_picture(io.BytesIO(stamp_bytes), width=Pt(_STAMP_IMAGE_WIDTH_PT))
+            try:
+                stamp_element = OxmlElement("w:p")
+                target._p.addnext(stamp_element)
+                after = Paragraph(stamp_element, target._parent)
+                after.alignment = target.alignment
+                after.add_run().add_picture(io.BytesIO(stamp_bytes), width=Pt(_STAMP_IMAGE_WIDTH_PT))
+            except Exception:
+                pass
 
 
 def fill_document(doc_path: Path, variables: Dict[str, str], output_path: Path) -> List[str]:
