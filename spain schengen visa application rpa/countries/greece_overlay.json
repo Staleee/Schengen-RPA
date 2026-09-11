@@ -74,14 +74,15 @@
  "nationality": {
   "page": 1,
   "rect": [
-   346.1,
-   456.8,
-   427.9,
-   466.4
+   390.0,
+   411.8,
+   434.0,
+   422.9
   ],
   "align": "left",
   "valign": "bottom",
-  "fontsize": 9.0
+  "fontsize": 8.0,
+  "min_fontsize": 5.0
  },
  "passport_number": {
   "page": 2,

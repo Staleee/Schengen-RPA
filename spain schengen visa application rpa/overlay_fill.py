@@ -40,11 +40,17 @@ def _truthy(v: Any) -> bool:
 
 
 def _fit_fontsize(text: str, width: float, base: float, minimum: float) -> float:
-    """Largest fontsize (<= base, >= minimum) whose single longest word fits the width."""
-    longest = max(text.split(), key=len, default=text)
+    """Largest fontsize (<= base, >= minimum) at which the whole text fits the width.
+
+    Measuring only the longest word (as this did) understates a multi-word value, and a
+    single-line field does not wrap — so the overflow was drawn straight across the form's ruling
+    line into the next cell. Greece's §7 "SRI LANKAN" ran into the "Application lodged at" column
+    that way. Shrinking the whole string keeps it inside its cell, which is what the module
+    docstring already promises; ``minimum`` still bounds how small it may get.
+    """
     size = base
     while size > minimum:
-        if fitz.get_text_length(longest, fontname=_FONT, fontsize=size) <= width - 2:
+        if fitz.get_text_length(text, fontname=_FONT, fontsize=size) <= width - 2:
             break
         size -= 0.5
     return size

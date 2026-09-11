@@ -105,6 +105,11 @@ OVERRIDES: dict = {
         "person_filling_form_phone":         {"page": 3, "rect": [312.0, 634.0, 470.0, 648.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
     },
     "greece": {
+        # §7 holds three stacked labels in one cell ("Current nation-/ality:", "Nationality at
+        # birth, if different:", "Other nationalities:"). The "below" anchor lands under the whole
+        # cell, so the value printed on the "Other nationalities" line and §7 read as if the
+        # current nationality were missing. Pin it beside "ality:" instead (Tourist Visa row 36).
+        "nationality":             {"page": 1, "rect": [390.0, 411.8, 434.0, 422.9], "align": "left", "valign": "bottom", "fontsize": 8.0, "min_fontsize": 5.0},
         "maid_phone":              {"page": 2, "rect": [404.0, 403.0, 505.0, 417.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
         "residence_number":        {"page": 2, "rect": [293.0, 460.0, 338.0, 474.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
         "residence_valid_until":   {"page": 2, "rect": [384.0, 460.0, 470.0, 474.0], "align": "left", "valign": "bottom", "fontsize": 8.0},

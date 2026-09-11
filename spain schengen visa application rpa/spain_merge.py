@@ -102,18 +102,36 @@ def _country_name_for_birth_field(nationality_value: str) -> str:
 
 
 def resolve_travel_partner_contact(b: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    """The single person travelling with the maid, for §31.
+
+    Each side falls back to the other because the two key families describe one person, and
+    pro-backend's resolveClientOrCompanion already resolves them that way: without the fallback a
+    single blank ERP column (the client's email is frequently unset) emptied §31 even though the
+    workflow's own mandatory companion field held the value.
+
+    The address is that person's UAE home, not the trip's accommodation — §31 asks for the
+    address of the inviting person named alongside it, so printing a hotel there described a
+    different party than the name. Accommodation remains the fallback so §31 is never empty.
+    """
+    address = (
+        b.get("companion_address")
+        or b.get("client_erp_address")
+        or b.get("companion_hotel_address")
+        or b.get("client_hotel_address")
+        or b.get("client_address")
+    )
     if _truthy(b.get("client_is_travel_companion")):
         return {
-            "name": b.get("client_name") or b.get("client_full_name"),
-            "address": b.get("client_hotel_address") or b.get("client_address"),
-            "email": b.get("client_email"),
-            "phone": b.get("client_phone"),
+            "name": b.get("client_name") or b.get("client_full_name") or b.get("companion_name"),
+            "address": address,
+            "email": b.get("client_email") or b.get("companion_email"),
+            "phone": b.get("client_phone") or b.get("companion_phone"),
         }
     return {
-        "name": b.get("companion_name") or b.get("companion_full_name"),
-        "address": b.get("companion_hotel_address") or b.get("companion_address"),
-        "email": b.get("companion_email"),
-        "phone": b.get("companion_phone"),
+        "name": b.get("companion_name") or b.get("companion_full_name") or b.get("client_name"),
+        "address": address,
+        "email": b.get("companion_email") or b.get("client_email"),
+        "phone": b.get("companion_phone") or b.get("client_phone"),
     }
 
 
@@ -283,20 +301,24 @@ def merge_spain_schengen_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     if tp["phone"]:
         out["host_travel_phone"] = tp["phone"]
 
-    # §34: Texto31 = client name; Texto32 = ERP address + client email
+    # §34: Texto31 = the person filling in the form; Texto32 = their home address + email.
+    # The sponsor_* keys are pro-backend's already-resolved travelling companion, so they win over
+    # the raw ERP client_*: those named the employer here while §31 above named the companion, so
+    # one form asserted two different people were travelling with the maid.
     c_name = (
-        _nonempty_str(b.get("client_name"))
+        _nonempty_str(b.get("sponsor_client_name"))
+        or _nonempty_str(b.get("client_name"))
         or _nonempty_str(b.get("client_full_name"))
-        or _nonempty_str(b.get("sponsor_client_name"))
     )
     if c_name:
         out["sponsor_section_client_name"] = c_name
     erp_addr = (
-        _nonempty_str(b.get("client_erp_address"))
+        _nonempty_str(b.get("companion_address"))
         or _nonempty_str(b.get("sponsor_client_address"))
+        or _nonempty_str(b.get("client_erp_address"))
         or _nonempty_str(b.get("client_address"))
     )
-    c_em = _nonempty_str(b.get("client_email")) or _nonempty_str(b.get("sponsor_client_email"))
+    c_em = _nonempty_str(b.get("sponsor_client_email")) or _nonempty_str(b.get("client_email"))
     if erp_addr or c_em:
         parts = [x for x in (erp_addr, c_em) if x]
         if len(parts) == 2 and parts[0] == parts[1]:
