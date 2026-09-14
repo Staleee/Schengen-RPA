@@ -92,17 +92,25 @@ OVERRIDES: dict = {
         # §20 residence permit — value after "No." up to "Valid until", then after "Valid until".
         "residence_number":        {"page": 2, "rect": [293.0, 432.0, 338.0, 446.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
         "residence_valid_until":   {"page": 2, "rect": [384.0, 432.0, 470.0, 446.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
-        # §29 previous Schengen visa: "No ☐  Yes ☐" — first box = No, second = Yes.
-        "schengen_before_no":      {"page": 3, "check": True, "box": [92.0, 101.5, 99.0, 108.5]},
-        "schengen_before_yes":     {"page": 3, "check": True, "box": [115.0, 101.5, 122.0, 108.5]},
+        # §29 previous Schengen visa: "No ☐  Yes ☐" — first box = No, second = Yes. Boxes are the
+        # measured ink rects of the printed ☐; the glyph bbox they were taken from spans the font's
+        # ascent/descent and sits ~5pt higher, which is why these marks printed above their boxes.
+        "schengen_before_no":      {"page": 3, "check": True, "box": [93.1, 107.6, 99.0, 114.2]},
+        "schengen_before_yes":     {"page": 3, "check": True, "box": [115.3, 107.6, 121.2, 114.2]},
+        # §28 "Intended date of departure from the Schengen area ...". The sentence is the last
+        # thing on the cell's line (ends x≈381) and the cell rule is at y≈82, so a value placed
+        # below it landed past the rule and collided with §29. Ops asked for it beside the sentence.
+        "departure_date":          {"page": 3, "rect": [386.0, 65.9, 470.0, 77.0], "align": "left", "valign": "bottom", "fontsize": 9.0},
         # §31 host telephone (right of the §30/31 "Telephone No" on the inviting-person line).
-        "partner_phone":           {"page": 3, "rect": [312.0, 245.0, 470.0, 259.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "partner_phone":           {"page": 3, "rect": [340.0, 245.0, 470.0, 259.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
         # §20 residence "Yes" tick (the number/validity render on the dotted line beside it).
-        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [69.0, 432.0, 76.0, 439.0]},
+        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [69.2, 436.8, 75.0, 443.4]},
         # §34 person filling in the form (the sponsor block): companion name, address+email, phone.
+        # The address block sits between its label (ends y≈658) and the cell rule at y≈681; it used
+        # to run to y=690, so its second line (the email) fell on and past that rule.
         "person_filling_form_name":          {"page": 3, "rect": [72.0, 612.0, 340.0, 625.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
-        "person_filling_form_address_email": {"page": 3, "rect": [72.0, 662.0, 300.0, 690.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
-        "person_filling_form_phone":         {"page": 3, "rect": [312.0, 634.0, 470.0, 648.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "person_filling_form_address_email": {"page": 3, "rect": [72.0, 659.0, 250.0, 680.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
+        "person_filling_form_phone":         {"page": 3, "rect": [340.0, 634.0, 470.0, 648.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
     },
     "greece": {
         # §7 holds three stacked labels in one cell ("Current nation-/ality:", "Nationality at
@@ -113,25 +121,41 @@ OVERRIDES: dict = {
         "maid_phone":              {"page": 2, "rect": [404.0, 403.0, 505.0, 417.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
         "residence_number":        {"page": 2, "rect": [293.0, 460.0, 338.0, 474.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
         "residence_valid_until":   {"page": 2, "rect": [384.0, 460.0, 470.0, 474.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
-        "schengen_before_no":      {"page": 3, "check": True, "box": [93.0, 101.5, 100.0, 108.5]},
-        "schengen_before_yes":     {"page": 3, "check": True, "box": [116.0, 101.5, 123.0, 108.5]},
-        "partner_phone":           {"page": 3, "rect": [312.0, 245.0, 470.0, 259.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
-        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [68.0, 460.0, 75.0, 467.0]},
-        "person_filling_form_name":          {"page": 3, "rect": [72.0, 596.0, 340.0, 609.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
-        "person_filling_form_address_email": {"page": 3, "rect": [72.0, 635.0, 300.0, 662.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
-        "person_filling_form_phone":         {"page": 3, "rect": [312.0, 607.0, 470.0, 621.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        # §20/§28 ticks: every box below is the measured ink rect of the printed ☐ (see
+        # _probe_boxes' method — a glyph's bbox spans the font's full ascent/descent, so it sits
+        # ~5pt above the square, which is why these marks all printed above their boxes).
+        "schengen_before_no":      {"page": 3, "check": True, "box": [93.7, 107.4, 99.6, 114.0]},
+        "schengen_before_yes":     {"page": 3, "check": True, "box": [116.4, 107.4, 122.3, 114.0]},
+        # §30 host telephone — clear of the "Telephone No:" label, which runs to x≈335.
+        "partner_phone":           {"page": 3, "rect": [340.0, 245.0, 470.0, 259.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [69.0, 464.4, 74.8, 471.0]},
+        # §33: the name belongs in the blank band between "applicant:" (ends y≈582) and the cell
+        # rule at y≈605 — it used to be baselined at ≈607 and printed struck through by that rule.
+        # The address+email block likewise sits between its own label (ends y≈631) and the rule at
+        # y≈654, and stops short of the "Telephone No:" column at x≈257.
+        "person_filling_form_name":          {"page": 3, "rect": [72.0, 586.0, 340.0, 603.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "person_filling_form_address_email": {"page": 3, "rect": [72.0, 632.5, 250.0, 653.5], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
+        "person_filling_form_phone":         {"page": 3, "rect": [340.0, 609.0, 470.0, 621.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
     },
     "bulgaria": {
         "maid_phone":              {"page": 2, "rect": [424.0, 442.0, 545.0, 458.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
         "residence_number":        {"page": 2, "rect": [361.0, 517.0, 480.0, 533.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
         "residence_valid_until":   {"page": 2, "rect": [123.0, 533.0, 300.0, 549.0], "align": "left", "valign": "bottom", "fontsize": 8.0},
-        "schengen_before_no":      {"page": 3, "check": True, "box": [170.0, 274.5, 177.0, 281.5]},
-        "schengen_before_yes":     {"page": 3, "check": True, "box": [200.0, 274.5, 207.0, 281.5]},
-        "partner_phone":           {"page": 3, "rect": [312.0, 441.0, 470.0, 457.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
-        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [68.0, 517.0, 75.0, 524.0]},
-        "person_filling_form_name":          {"page": 4, "rect": [72.0, 336.0, 400.0, 350.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
-        "person_filling_form_address_email": {"page": 4, "rect": [72.0, 402.0, 320.0, 428.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
-        "person_filling_form_phone":         {"page": 4, "rect": [332.0, 347.0, 480.0, 363.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        # §20/§28 ticks: measured ink rects of the printed ☐ (the glyph bboxes these came from
+        # span the font's ascent/descent and sit ~5pt higher, so the marks printed above the box).
+        "schengen_before_no":      {"page": 3, "check": True, "box": [170.7, 281.1, 179.1, 289.5]},
+        "schengen_before_yes":     {"page": 3, "check": True, "box": [200.9, 281.1, 209.3, 289.5]},
+        # §30 host telephone. "Telephone No:" runs x 257-335 on this form, so a value starting at
+        # x=312 printed on top of the label and read as one run-together string.
+        "partner_phone":           {"page": 3, "rect": [340.0, 443.0, 470.0, 457.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "resident_outside_nationality_yes": {"page": 2, "check": True, "box": [69.1, 522.6, 77.5, 531.0]},
+        # §33: the name goes in the blank band between "if different from the applicant:" (ends
+        # y≈323) and the cell rule at y≈343. Baselined at ≈348 it printed past that rule, on top of
+        # the next cell's "Address and email address of the" label. The address+email block sits
+        # between its own label (ends y≈393) and the rule at y≈425.
+        "person_filling_form_name":          {"page": 4, "rect": [72.0, 325.0, 400.0, 341.0], "align": "left", "valign": "bottom", "fontsize": 8.5},
+        "person_filling_form_address_email": {"page": 4, "rect": [72.0, 395.0, 250.0, 423.0], "align": "left", "valign": "top", "fontsize": 8.0, "min_fontsize": 6.0, "multiline": True},
+        "person_filling_form_phone":         {"page": 4, "rect": [340.0, 348.8, 480.0, 362.8], "align": "left", "valign": "bottom", "fontsize": 8.5},
         # Field 30: "inviting" appears in both the name label and the address sub-label with
         # justified 4-line wrapping, so pin both values explicitly. Name -> trailing blank of the
         # label's last line; address+email -> blank area below the address sub-label block.

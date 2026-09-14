@@ -30,6 +30,51 @@ import fitz  # PyMuPDF
 _FONT = "helv"
 _ALIGN = {"left": fitz.TEXT_ALIGN_LEFT, "center": fitz.TEXT_ALIGN_CENTER, "right": fitz.TEXT_ALIGN_RIGHT}
 
+# Hard floor for auto-shrinking. A per-field ``min_fontsize`` states the size below which a value
+# stops being comfortable to read; this is the size below which it stops being a value at all. The
+# two were conflated, so a field whose content needed one step below its own min printed nothing.
+_ABS_MIN_FONTSIZE = 4.0
+
+
+def _wrap_to_width(text: str, width: float, size: float) -> List[str]:
+    """Greedy word wrap at ``size``, honouring explicit newlines. Over-long words are left whole."""
+    lines: List[str] = []
+    for paragraph in text.split("\n"):
+        current = ""
+        for word in paragraph.split():
+            candidate = f"{current} {word}".strip()
+            if current and fitz.get_text_length(candidate, fontname=_FONT, fontsize=size) > width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        lines.append(current)
+    return lines
+
+
+def _draw_wrapped_lines(page, rect, text: str, size: float, align: int) -> None:
+    """Write ``text`` into ``rect`` line by line with ``insert_text``, which always draws.
+
+    Used only when even the floor size overflows the cell. ``insert_textbox`` would render nothing
+    at all in that situation, so the value would vanish; here the lines that fit are written and
+    anything beyond the cell's height is dropped, which at least keeps the leading content (for the
+    address+email blocks that means the address, then as much of the email as there is room for).
+    """
+    leading = size * 1.15
+    max_lines = max(1, int((rect.height + 0.5) / leading))
+    for index, line in enumerate(_wrap_to_width(text, rect.width - 2, size)[:max_lines]):
+        if not line:
+            continue
+        baseline = rect.y0 + size * 0.8 + index * leading
+        width = fitz.get_text_length(line, fontname=_FONT, fontsize=size)
+        if align == fitz.TEXT_ALIGN_CENTER:
+            x = rect.x0 + max(0.0, (rect.width - width) / 2)
+        elif align == fitz.TEXT_ALIGN_RIGHT:
+            x = max(rect.x0, rect.x1 - width)
+        else:
+            x = rect.x0
+        page.insert_text(fitz.Point(x, baseline), line, fontname=_FONT, fontsize=size, color=(0, 0, 0))
+
 
 def _truthy(v: Any) -> bool:
     if v is True:
@@ -67,18 +112,24 @@ def _draw_text(page, spec: Dict[str, Any], text: str) -> None:
     if multiline:
         # Shrink until the wrapped text fits the box height (insert_textbox returns >=0 on fit).
         size = base
-        while size >= minimum:
+        while size >= _ABS_MIN_FONTSIZE:
             rc = page.insert_textbox(rect, text, fontname=_FONT, fontsize=size, align=align,
                                      color=(0, 0, 0), render_mode=0)
             if rc >= 0:
                 return
             size -= 0.5
-        # Last resort: draw at the minimum size (may clip) so the value is not silently dropped.
-        page.insert_textbox(rect, text, fontname=_FONT, fontsize=minimum, align=align, color=(0, 0, 0))
+        # Nothing fit even at the floor. insert_textbox writes NOTHING when it overflows, so the
+        # old "draw at min_fontsize anyway" line silently produced an empty field rather than
+        # clipped text — Bulgaria's §19 needed 5.5pt against a 6.0 min and printed blank, and
+        # Greece/Portugal fit at exactly 6.0, so any longer address or email lost the whole value.
+        # Place the lines by hand instead: a cramped value still beats an absent one.
+        _draw_wrapped_lines(page, rect, text, _ABS_MIN_FONTSIZE, align)
         return
 
-    # Single line: fit to width, then baseline-place by valign inside the rect.
-    size = _fit_fontsize(text, rect.width, base, minimum)
+    # Single line: fit to width, then baseline-place by valign inside the rect. Shrinking is allowed
+    # past the field's own min_fontsize down to the hard floor — a single line does not wrap, so the
+    # alternative is drawing across the form's ruling line into the neighbouring cell.
+    size = _fit_fontsize(text, rect.width, base, min(minimum, _ABS_MIN_FONTSIZE))
     ascent, descent = 0.8 * size, 0.2 * size
     valign = str(spec.get("valign", "bottom"))
     if valign == "top":

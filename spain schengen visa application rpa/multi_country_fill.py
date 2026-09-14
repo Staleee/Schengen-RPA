@@ -276,27 +276,24 @@ def merge_schengen_common_body(raw: Dict[str, Any]) -> Dict[str, Any]:
     if maid_addr or maid_email:
         out["applicant_address_email"] = "\n".join(x for x in (maid_addr, maid_email) if x)
 
-    # Travel partner (client when they accompany, else the companion). Each side falls back to
-    # the other, mirroring pro-backend's resolveClientOrCompanion: the two describe one person,
-    # and without the fallback a single blank ERP column emptied §30/§31 even though the
-    # workflow's own (mandatory) companion field held the value — the ERP client's email in
-    # particular is frequently unset.
+    # The one person travelling with the maid. The companion_* keys win in BOTH branches: when the
+    # client accompanies, the workflow seeds those fields from the ERP client and then leaves them
+    # editable, so they hold whatever the agent corrected — preferring client_* reprinted the stale
+    # ERP value and threw the correction away. client_* stays as the fallback, and only when the
+    # client is the one travelling: borrowing it otherwise would name the wrong person.
+    partner_name = _nonempty(b.get("companion_name"))
+    partner_email = _nonempty(b.get("companion_email"))
+    partner_phone = _nonempty(b.get("companion_phone"))
     if _truthy(b.get("client_is_travel_companion")):
-        partner_name = _nonempty(b.get("client_name")) or _nonempty(b.get("companion_name"))
-        partner_email = _nonempty(b.get("client_email")) or _nonempty(b.get("companion_email"))
-        partner_phone = _nonempty(b.get("client_phone")) or _nonempty(b.get("companion_phone"))
-    else:
-        partner_name = _nonempty(b.get("companion_name")) or _nonempty(b.get("client_name"))
-        partner_email = _nonempty(b.get("companion_email")) or _nonempty(b.get("client_email"))
-        partner_phone = _nonempty(b.get("companion_phone")) or _nonempty(b.get("client_phone"))
-    # §30/§31 asks for the address of the *inviting person* named just above. The maid is invited
-    # by the employer she travels with, so ops want that person's UAE home address here — the
-    # block used to print the trip's accommodation instead, so the name and the address described
-    # two different parties. The accommodation stays as the fallback so the block is never empty.
+        partner_name = partner_name or _nonempty(b.get("client_name"))
+        partner_email = partner_email or _nonempty(b.get("client_email"))
+        partner_phone = partner_phone or _nonempty(b.get("client_phone"))
+    # §30/§31 asks where the applicant will stay in the Member State, so this is the destination
+    # accommodation — never the companion's UAE home, which belongs in §33/§34 below. (A previous
+    # pass put the UAE address here to match the name beside it; ops corrected that: the consulate
+    # reads this block as the address *in* the destination country.)
     partner_addr = (
-        _nonempty(b.get("companion_home_address"))
-        or _nonempty(b.get("client_erp_address"))
-        or _nonempty(b.get("companion_hotel_address"))
+        _nonempty(b.get("companion_hotel_address"))
         or _nonempty(b.get("client_hotel_address"))
         or _nonempty(b.get("hotel_address"))
     )

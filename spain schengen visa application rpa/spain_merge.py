@@ -104,34 +104,35 @@ def _country_name_for_birth_field(nationality_value: str) -> str:
 def resolve_travel_partner_contact(b: Dict[str, Any]) -> Dict[str, Optional[str]]:
     """The single person travelling with the maid, for §31.
 
-    Each side falls back to the other because the two key families describe one person, and
-    pro-backend's resolveClientOrCompanion already resolves them that way: without the fallback a
-    single blank ERP column (the client's email is frequently unset) emptied §31 even though the
-    workflow's own mandatory companion field held the value.
+    The companion_* keys win, mirroring pro-backend's resolveClientOrCompanion. When the client
+    accompanies the maid, the workflow seeds those fields from the ERP client and leaves them
+    editable, so they hold whatever the agent corrected; reading client_* first reprinted the stale
+    ERP value. client_* is the fallback for a blank snapshot (the client's email is frequently
+    unset in ERP) but only when the client is the one travelling — borrowing it otherwise would
+    name the wrong person.
 
-    The address is that person's UAE home, not the trip's accommodation — §31 asks for the
-    address of the inviting person named alongside it, so printing a hotel there described a
-    different party than the name. Accommodation remains the fallback so §31 is never empty.
+    The address is the destination accommodation, not the companion's UAE home: §31 states where
+    the applicant will stay in the Member State, and the UAE home belongs in §34. (A previous pass
+    put the UAE address here so it would match the name beside it; ops corrected that.)
     """
     address = (
-        b.get("companion_address")
-        or b.get("client_erp_address")
-        or b.get("companion_hotel_address")
+        b.get("companion_hotel_address")
         or b.get("client_hotel_address")
+        or b.get("hotel_address")
         or b.get("client_address")
     )
     if _truthy(b.get("client_is_travel_companion")):
         return {
-            "name": b.get("client_name") or b.get("client_full_name") or b.get("companion_name"),
+            "name": b.get("companion_name") or b.get("client_name") or b.get("client_full_name"),
             "address": address,
-            "email": b.get("client_email") or b.get("companion_email"),
-            "phone": b.get("client_phone") or b.get("companion_phone"),
+            "email": b.get("companion_email") or b.get("client_email"),
+            "phone": b.get("companion_phone") or b.get("client_phone"),
         }
     return {
-        "name": b.get("companion_name") or b.get("companion_full_name") or b.get("client_name"),
+        "name": b.get("companion_name") or b.get("companion_full_name"),
         "address": address,
-        "email": b.get("companion_email") or b.get("client_email"),
-        "phone": b.get("companion_phone") or b.get("client_phone"),
+        "email": b.get("companion_email"),
+        "phone": b.get("companion_phone"),
     }
 
 
