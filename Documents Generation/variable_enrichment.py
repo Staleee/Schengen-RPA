@@ -254,7 +254,35 @@ def enrich_variables(
             separator="، ",
         )
 
+    if document_type == "noc-syria":
+        gender = (out.get("companion_gender") or "").strip()
+        if not gender:
+            gender = _raw_body_first_string(
+                raw_body, "companion_gender", "companionGender", "Companion_Gender"
+            )
+        title_raw = (out.get("companion_title") or "").strip() or gender
+        out["companion_title"] = syria_companion_title_arabic(title_raw)
+
     return out
+
+
+_SYRIA_COMPANION_FEMALE = frozenset({"f", "female"})
+_SYRIA_COMPANION_MALE = frozenset({"m", "male"})
+
+
+def syria_companion_title_arabic(raw: str) -> str:
+    """Map companion gender codes to Arabic honorific for noc-syria {{companion_title}}."""
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    if s in ("السيدة", "السيد"):
+        return s
+    key = s.lower()
+    if key in _SYRIA_COMPANION_FEMALE:
+        return "السيدة"
+    if key in _SYRIA_COMPANION_MALE:
+        return "السيد"
+    return s
 
 
 def _join_clauses(*parts: str, separator: str = ", ") -> str:

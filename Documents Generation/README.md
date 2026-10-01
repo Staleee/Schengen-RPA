@@ -37,6 +37,7 @@ uvicorn api_server:app --reload --port 8000
 | POST | `/generate?document_type=cover` | Cover letter; body = cover variables. Returns .docx. Add `&format=json` for JSON with base64 file + filename (recommended for Zoho upload/preview). |
 | POST | `/generate?document_type=sponsor` | Sponsor letter; same, use `?format=json` for Zoho. |
 | POST | `/generate?document_type=invitation` | Invitation letter; same, use `?format=json` for Zoho. |
+| POST | `/generate?document_type=noc-syria` | Syria maid NOC (Arabic `.docx` → PDF). Body: see **REQUEST_BODY.md** §4; sample **samples/noc_syria_request.json**. |
 | POST | `/generate-all` | Body = union of all variables → ZIP. Add `?format=json` for Zoho. |
 
 ---

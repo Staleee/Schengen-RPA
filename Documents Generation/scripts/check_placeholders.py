@@ -8,6 +8,7 @@ TEMPLATES = {
     "cover": BASE / "Cover_Letter.docx",
     "sponsor": BASE / "Sponsor_letter.docx",
     "invitation": BASE / "Invitation Letter (Schengen Visa – Domestic Worker_Housemaid).docx",
+    "noc-syria": BASE / "noc-syria.docx",
 }
 MAPPING_PATH = BASE / "document_mapping.json"
 sys.path.insert(0, str(BASE))

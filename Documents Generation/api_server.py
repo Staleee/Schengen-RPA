@@ -40,6 +40,7 @@ TEMPLATES = {
     "sponsor": BASE_DIR / "Sponsor_letter.docx",
     "cover": BASE_DIR / "Cover_Letter.docx",
     "noc": BASE_DIR / "noc-travel.docx",
+    "noc-syria": BASE_DIR / "noc-syria.docx",
 }
 
 # The GCC issuing affidavit is a flat PDF template (no AcroForm fields), filled

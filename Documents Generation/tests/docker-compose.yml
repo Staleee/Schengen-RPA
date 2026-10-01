@@ -34,4 +34,4 @@ services:
       DOCGEN_BASE_URL: "http://docgen:8000"
     volumes:
       - ./output:/app/tests/output
-    command: ["python", "tests/verify_noc.py"]
+    command: ["sh", "-c", "python tests/verify_noc.py && python tests/verify_noc_syria.py"]

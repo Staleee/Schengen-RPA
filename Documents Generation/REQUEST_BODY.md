@@ -90,7 +90,33 @@ Slashes or hyphens are fine between parts. This avoids mixing up June 3 vs 3 Jun
 
 ---
 
-## 4. GCC issuing affidavit
+## 4. Syria maid NOC (Arabic)
+
+**POST /generate?document_type=noc-syria**
+
+Arabic letter (`noc-syria.docx`); default output is **PDF**. Use `?format=json` for Zoho (base64 + filename). All fields are caller-supplied (including `today_date`).
+
+| Request key | Description |
+|-------------|-------------|
+| `today_date` | Issue date as printed on the letter |
+| `maid_name` | Maid full name (Arabic) |
+| `maid_nationality_arabic` | Maid nationality in Arabic |
+| `maid_passport_number` | Maid passport number |
+| `maid_eid_number` | Maid Emirates ID (15 digits; formatted to 784-YYYY-NNNNNNN-C when valid) |
+| `maid_joining_date` | Employment start / joining date |
+| `maid_passport_expiry` | Passport expiry date |
+| `companion_gender` | Companion honorific: `f` / `F` / `female` / `FEMALE` → **السيدة**; `m` / `M` / `male` / `MALE` → **السيد** (fills `{{companion_title}}` in the template) |
+| `companion_name` | Client / companion name (Arabic) |
+| `maid_monthly_salary` | Monthly salary (as sent) |
+| `maid_salary_by_year` | Annual salary (as sent) |
+| `signatory_name` | Signatory line (often Arabic) |
+| `signatory_phone` | Signatory phone |
+
+Sample body: **samples/noc_syria_request.json**.
+
+---
+
+## 5. GCC issuing affidavit
 
 **POST /generate-affidavit** — always returns **PDF** (`Content-Type: application/pdf`, filename `gcc_issuing_affidavit.pdf`); `?format=json` works like the other endpoints. There is no `?output=docx` — the template (`AFFIDAVIT-template.pdf`) is already a PDF and is filled in place.
 

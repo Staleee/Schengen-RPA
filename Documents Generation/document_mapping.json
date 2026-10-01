@@ -109,6 +109,21 @@
     "maid_passport_number": "{{passport-no}}",
     "maid_nic_number": "{{nic-number}}"
   },
+  "noc-syria": {
+    "today_date": "{{today_date}}",
+    "maid_name": "{{maid_name}}",
+    "maid_nationality_arabic": "{{maid_nationality_arabic}}",
+    "maid_passport_number": "{{maid_passport_number}}",
+    "maid_eid_number": "{{maid_eid_number}}",
+    "maid_joining_date": "{{maid_joining_date}}",
+    "maid_passport_expiry": "{{maid_passport_expiry}}",
+    "companion_name": "{{companion_name}}",
+    "companion_gender": "{{companion_title}}",
+    "maid_monthly_salary": "{{maid_monthly_salary}}",
+    "maid_salary_by_year": "{{maid_salary_by_year}}",
+    "signatory_name": "{{signatory_name}}",
+    "signatory_phone": "{{signatory_phone}}"
+  },
   "client-noc": {
     "client_name": "{{client_name}}",
     "client_nationality": "{{client_nationality}}",

@@ -12,7 +12,10 @@ Exit code is non-zero if any check fails. Against an already-running service:
 
 ```bash
 DOCGEN_BASE_URL=http://localhost:8000 python tests/verify_noc.py
+DOCGEN_BASE_URL=http://localhost:8000 python tests/verify_noc_syria.py
 ```
+
+`docker compose` runs both scripts (Schengen/Turkey NOC + Syria NOC).
 
 ## Why this has to run in Docker
 
