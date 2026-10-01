@@ -124,7 +124,7 @@ def main() -> int:
         "15 March, 2019" in text,
     )
     failures += _check(
-        "passport expiry intact (not reordered by bidi)",
+        "r-visa expiry intact (not reordered by bidi)",
         "20 June, 2030" in text,
     )
     failures += _check(

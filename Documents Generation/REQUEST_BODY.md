@@ -104,7 +104,7 @@ Arabic letter (`noc-syria.docx`); default output is **PDF**. Use `?format=json` 
 | `maid_passport_number` | Maid passport number |
 | `maid_eid_number` | Maid Emirates ID (15 digits; formatted to 784-YYYY-NNNNNNN-C when valid) |
 | `maid_joining_date` | Employment start / joining date |
-| `maid_passport_expiry` | Passport expiry date |
+| `maid_rvisa_expiry` | Maid R-visa / residence permit expiry date |
 | `companion_gender` | Companion honorific: `f` / `F` / `female` / `FEMALE` → **السيدة**; `m` / `M` / `male` / `MALE` → **السيد** (fills `{{companion_title}}` in the template) |
 | `companion_name` | Client / companion name (Arabic) |
 | `maid_monthly_salary` | Monthly salary (as sent) |

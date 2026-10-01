@@ -79,7 +79,7 @@ is always PDF; substituted values render bold like the letters.
 
 ## Syria maid NOC (`?document_type=noc-syria`)
 
-Template: `noc-syria.docx` (Arabic, RTL). Keys match placeholders 1:1 — see `document_mapping.json` → `"noc-syria"`. `maid_name` and `companion_name` are expected in Arabic (RTL with the body text). Send `companion_gender` (`f`/`female` or `m`/`male`, any case) to fill `{{companion_title}}` as **السيدة** or **السيد**. Dates, EID, passport, salaries, and phone stay LTR. Sample: **samples/noc_syria_request.json**.
+Template: `noc-syria.docx` (Arabic, RTL). Keys match placeholders 1:1 — see `document_mapping.json` → `"noc-syria"`. `maid_name` and `companion_name` are expected in Arabic (RTL with the body text). Send `companion_gender` (`f`/`female` or `m`/`male`, any case) to fill `{{companion_title}}` as **السيدة** or **السيد**. Dates, EID, passport number, `maid_rvisa_expiry`, salaries, and phone stay LTR. Sample: **samples/noc_syria_request.json**.
 
 ---
 

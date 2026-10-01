@@ -116,7 +116,7 @@
     "maid_passport_number": "{{maid_passport_number}}",
     "maid_eid_number": "{{maid_eid_number}}",
     "maid_joining_date": "{{maid_joining_date}}",
-    "maid_passport_expiry": "{{maid_passport_expiry}}",
+    "maid_rvisa_expiry": "{{maid_rvisa_expiry}}",
     "companion_name": "{{companion_name}}",
     "companion_gender": "{{companion_title}}",
     "maid_monthly_salary": "{{maid_monthly_salary}}",
