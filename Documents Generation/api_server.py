@@ -42,6 +42,7 @@ TEMPLATES = {
     "noc": BASE_DIR / "noc-travel.docx",
     "noc-syria": BASE_DIR / "noc-syria.docx",
     "employment-certificate": BASE_DIR / "certificate_of_employment.docx",
+    "salary-statement": BASE_DIR / "salary_statement.docx",
 }
 
 # The GCC issuing affidavit is a flat PDF template (no AcroForm fields), filled
@@ -98,6 +99,22 @@ def _employment_certificate_download_name(body: Dict[str, Any], ext: str) -> str
         maid = maid.replace(ch, "")
     maid = maid.strip("._") or "applicant"
     return f"{maid}_coe.{ext}"
+
+
+def _salary_statement_download_name(body: Dict[str, Any], ext: str) -> str:
+    """Download filename for salary-statement: {maid_name}_salary_statement.{ext}."""
+    ext = ext.lstrip(".")
+    maid = str(body.get("maid_name") or "").strip()
+    if not maid:
+        for k, v in body.items():
+            if normalize_key(str(k)) == "maid_name" and v is not None:
+                maid = str(v).strip()
+                break
+    maid = maid.replace(" ", "_")
+    for ch in _UNSAFE_FILENAME_CHARS:
+        maid = maid.replace(ch, "")
+    maid = maid.strip("._") or "applicant"
+    return f"{maid}_salary_statement.{ext}"
 
 
 def _build_one_document(
@@ -260,6 +277,9 @@ async def generate_one(
     if dt == "employment-certificate":
         ext = "pdf" if media_type == PDF_MEDIA else "docx"
         filename = _employment_certificate_download_name(body, ext)
+    if dt == "salary-statement":
+        ext = "pdf" if media_type == PDF_MEDIA else "docx"
+        filename = _salary_statement_download_name(body, ext)
 
     if format and format.lower() == "json":
         return {

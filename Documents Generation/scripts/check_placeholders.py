@@ -10,6 +10,7 @@ TEMPLATES = {
     "invitation": BASE / "Invitation Letter (Schengen Visa – Domestic Worker_Housemaid).docx",
     "noc-syria": BASE / "noc-syria.docx",
     "employment-certificate": BASE / "certificate_of_employment.docx",
+    "salary-statement": BASE / "salary_statement.docx",
 }
 MAPPING_PATH = BASE / "document_mapping.json"
 sys.path.insert(0, str(BASE))

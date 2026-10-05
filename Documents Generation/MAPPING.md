@@ -101,6 +101,25 @@ Template: `certificate_of_employment.docx`. Keys match placeholders 1:1 — see 
 
 ---
 
+## Salary statement (`?document_type=salary-statement`)
+
+Template: `salary_statement.docx`. Keys match placeholders 1:1 — see `document_mapping.json` → `"salary-statement"`. Expand **`salary_payments`** in the request (not in the mapping) to fill the six-row WPS table; newest payment → `_1`. Sample: **samples/salary_statement_request.json**.
+
+| Request body key | Replaced in template |
+|------------------|----------------------|
+| `today_date` | `{{today_date}}` |
+| `maid_name` | `{{maid_name}}` |
+| `maid_nationality` | `{{maid_nationality}}` |
+| `passport_number` | `{{passport_number}}` |
+| `client_title` | `{{client_title}}` |
+| `client_name` | `{{client_name}}` |
+| `signatory_name` | `{{signatory_name}}` |
+| `signatory_phone` | `{{signatory_phone}}` |
+| `last_salary_date_1` … `last_salary_date_6` | `{{last_salary_date_*}}` |
+| `last_salary_1` … `last_salary_6` | `{{last_salary_*}}` |
+
+---
+
 ## API
 
 - **GET /mapping** – Returns the exact key → placeholder mapping (from `document_mapping.json`). Optional `?document_type=cover|sponsor|invitation|affidavit`.

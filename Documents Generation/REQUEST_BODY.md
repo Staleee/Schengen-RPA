@@ -138,7 +138,33 @@ Sample body: **samples/employment_certificate_request.json**.
 
 ---
 
-## 6. GCC issuing affidavit
+## 6. Salary statement (Turkey Embassy)
+
+**POST /generate?document_type=salary-statement**
+
+English letter (`salary_statement.docx`); default output is **PDF**. Use `?format=json` for Zoho (base64 + filename). Response filename: **`{maid_name}_salary_statement.pdf`** (spaces in `maid_name` become underscores; use `?output=docx` for `{maid_name}_salary_statement.docx`). If `maid_name` is empty, **`applicant_salary_statement.pdf`**.
+
+Send the last six WPS payments in **`salary_payments`** (newest month → row `_1`). **`salary_payments` is not a Word placeholder** — the API expands it into `last_salary_date_1..6` and `last_salary_1..6`. Non-empty flat `last_salary_*` keys override the expanded row for that slot.
+
+| Request key | Description |
+|-------------|-------------|
+| `today_date` | Issue date on the letter; if omitted, server uses today (`D Month YYYY`) |
+| `maid_name` | Maid full name |
+| `maid_nationality` | Maid nationality |
+| `passport_number` | Maid passport number |
+| `client_title` | Client honorific (e.g. Mr., Mrs.) |
+| `client_name` | Client full name |
+| `signatory_name` | Signatory line |
+| `signatory_phone` | Signatory phone |
+| `salary_payments` | Array of up to 6 objects: `{ "date": "YYYY/MM/DD", "amount": "1500" }` (also `payment_date` / `salary_date`, `amount_aed` / `salary`) |
+| `last_salary_date_1` … `last_salary_date_6` | Optional override for table dates |
+| `last_salary_1` … `last_salary_6` | Optional override for table amounts |
+
+Sample body: **samples/salary_statement_request.json**.
+
+---
+
+## 7. GCC issuing affidavit
 
 **POST /generate-affidavit** — always returns **PDF** (`Content-Type: application/pdf`, filename `gcc_issuing_affidavit.pdf`); `?format=json` works like the other endpoints. There is no `?output=docx` — the template (`AFFIDAVIT-template.pdf`) is already a PDF and is filled in place.
 

@@ -1,0 +1,18 @@
+{
+  "today_date": "5 October 2026",
+  "maid_name": "Jane Doe",
+  "maid_nationality": "Filipino",
+  "passport_number": "P1234567",
+  "client_title": "Mr.",
+  "client_name": "John Smith",
+  "signatory_name": "HR Manager",
+  "signatory_phone": "+971 505544143",
+  "salary_payments": [
+    { "date": "2026/09/15", "amount": "1500" },
+    { "date": "2026/08/15", "amount": "1500" },
+    { "date": "2026/07/15", "amount": "1500" },
+    { "date": "2026/06/15", "amount": "1500" },
+    { "date": "2026/05/15", "amount": "1500" },
+    { "date": "2026/04/15", "amount": "1500" }
+  ]
+}

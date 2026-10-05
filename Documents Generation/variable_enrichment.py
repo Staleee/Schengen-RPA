@@ -4,7 +4,7 @@ Enrich template variables: trip duration from dates, salary number -> words.
 
 import re
 from datetime import date, datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from dateutil import parser as date_parser
@@ -180,6 +180,76 @@ def _raw_body_first_string(raw: Dict[str, Any], *candidate_keys: str) -> str:
     return ""
 
 
+_PAYMENT_DATE_KEYS = ("date", "payment_date", "salary_date")
+_PAYMENT_AMOUNT_KEYS = ("amount", "amount_aed", "salary")
+_SALARY_TABLE_SLOTS = 6
+
+
+def _format_letter_date(d: date) -> str:
+    """Printable date for English letters (e.g. 5 October 2026)."""
+    return f"{d.day} {d.strftime('%B %Y')}"
+
+
+def _payment_field(item: Dict[str, Any], candidate_keys: tuple[str, ...]) -> str:
+    from doc_utils import normalize_key as nk_fn
+
+    by_nk: Dict[str, Any] = {}
+    for k, v in item.items():
+        nk = nk_fn(str(k))
+        if nk and nk not in by_nk:
+            by_nk[nk] = v
+    for ck in candidate_keys:
+        nk = nk_fn(ck)
+        if nk in by_nk and by_nk[nk] is not None:
+            s = str(by_nk[nk]).strip()
+            if s:
+                return s
+    return ""
+
+
+def _read_salary_payments_list(raw_body: Dict[str, Any]) -> List[Dict[str, Any]]:
+    from doc_utils import normalize_key as nk_fn
+
+    by_nk: Dict[str, Any] = {}
+    for k, v in raw_body.items():
+        nk = nk_fn(str(k))
+        if nk and nk not in by_nk:
+            by_nk[nk] = v
+    val = by_nk.get(nk_fn("salary_payments"))
+    if val is None:
+        return []
+    if isinstance(val, dict):
+        return [val]
+    if isinstance(val, list):
+        return [x for x in val if isinstance(x, dict)]
+    return []
+
+
+def _expand_salary_payments(raw_body: Dict[str, Any]) -> Dict[str, str]:
+    """Map salary_payments[] to last_salary_date_N / last_salary_N (newest first, max 6)."""
+    items = _read_salary_payments_list(raw_body)
+    if not items:
+        return {}
+
+    parsed: List[tuple[Optional[date], str, str]] = []
+    for item in items:
+        date_raw = _payment_field(item, _PAYMENT_DATE_KEYS)
+        amount = _payment_field(item, _PAYMENT_AMOUNT_KEYS)
+        parsed.append((_parse_date(date_raw), date_raw, amount))
+
+    parsed.sort(key=lambda t: t[0] or date.min, reverse=True)
+
+    out: Dict[str, str] = {}
+    for i, (d, date_raw, amount) in enumerate(parsed[:_SALARY_TABLE_SLOTS], start=1):
+        if d is not None:
+            out[f"last_salary_date_{i}"] = _format_letter_date(d)
+        elif date_raw:
+            out[f"last_salary_date_{i}"] = date_raw
+        if amount:
+            out[f"last_salary_{i}"] = amount
+    return out
+
+
 def enrich_variables(
     document_type: str,
     variables: Dict[str, str],
@@ -253,6 +323,13 @@ def enrich_variables(
             f"الهوية الإماراتية: {_isolate_ltr(eid)}" if eid else "",
             separator="، ",
         )
+
+    if document_type == "salary-statement":
+        if not (out.get("today_date") or "").strip():
+            out["today_date"] = _format_letter_date(date.today())
+        for key, val in _expand_salary_payments(raw_body).items():
+            if not (out.get(key) or "").strip():
+                out[key] = val
 
     if document_type == "noc-syria":
         gender = (out.get("companion_gender") or "").strip()

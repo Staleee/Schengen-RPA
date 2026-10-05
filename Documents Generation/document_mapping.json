@@ -135,6 +135,28 @@
     "signatory_name": "{{signatory_name}}",
     "signatory_phone": "{{signatory_phone}}"
   },
+  "salary-statement": {
+    "today_date": "{{today_date}}",
+    "maid_name": "{{maid_name}}",
+    "maid_nationality": "{{maid_nationality}}",
+    "passport_number": "{{passport_number}}",
+    "client_title": "{{client_title}}",
+    "client_name": "{{client_name}}",
+    "signatory_name": "{{signatory_name}}",
+    "signatory_phone": "{{signatory_phone}}",
+    "last_salary_date_1": "{{last_salary_date_1}}",
+    "last_salary_1": "{{last_salary_1}}",
+    "last_salary_date_2": "{{last_salary_date_2}}",
+    "last_salary_2": "{{last_salary_2}}",
+    "last_salary_date_3": "{{last_salary_date_3}}",
+    "last_salary_3": "{{last_salary_3}}",
+    "last_salary_date_4": "{{last_salary_date_4}}",
+    "last_salary_4": "{{last_salary_4}}",
+    "last_salary_date_5": "{{last_salary_date_5}}",
+    "last_salary_5": "{{last_salary_5}}",
+    "last_salary_date_6": "{{last_salary_date_6}}",
+    "last_salary_6": "{{last_salary_6}}"
+  },
   "client-noc": {
     "client_name": "{{client_name}}",
     "client_nationality": "{{client_nationality}}",
