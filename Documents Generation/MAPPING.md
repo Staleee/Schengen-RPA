@@ -83,6 +83,24 @@ Template: `noc-syria.docx` (Arabic, RTL). Keys match placeholders 1:1 — see `d
 
 ---
 
+## Certificate of employment (`?document_type=employment-certificate`)
+
+Template: `certificate_of_employment.docx`. Keys match placeholders 1:1 — see `document_mapping.json` → `"employment-certificate"`. Sample: **samples/employment_certificate_request.json**.
+
+| Request body key | Replaced in template |
+|------------------|----------------------|
+| `today_date` | `{{today_date}}` |
+| `maid_title` | `{{maid_title}}` |
+| `maid_name` | `{{maid_name}}` |
+| `passport_number` | `{{passport_number}}` |
+| `joining_date` | `{{joining_date}}` |
+| `client_title` | `{{client_title}}` |
+| `client_name` | `{{client_name}}` |
+| `signatory_name` | `{{signatory_name}}` |
+| `signatory_phone` | `{{signatory_phone}}` |
+
+---
+
 ## API
 
 - **GET /mapping** – Returns the exact key → placeholder mapping (from `document_mapping.json`). Optional `?document_type=cover|sponsor|invitation|affidavit`.

@@ -41,6 +41,7 @@ TEMPLATES = {
     "cover": BASE_DIR / "Cover_Letter.docx",
     "noc": BASE_DIR / "noc-travel.docx",
     "noc-syria": BASE_DIR / "noc-syria.docx",
+    "employment-certificate": BASE_DIR / "certificate_of_employment.docx",
 }
 
 # The GCC issuing affidavit is a flat PDF template (no AcroForm fields), filled
@@ -78,6 +79,25 @@ def _ensure_zip_content(content: bytes, label: str = "file") -> None:
             status_code=500,
             detail=f"Generated {label} is not a valid docx/zip (starts with {start!r}). Check template and server.",
         )
+
+
+_UNSAFE_FILENAME_CHARS = '\\/:*?"<>|'
+
+
+def _employment_certificate_download_name(body: Dict[str, Any], ext: str) -> str:
+    """Download filename for employment-certificate: {maid_name}_coe.{ext}."""
+    ext = ext.lstrip(".")
+    maid = str(body.get("maid_name") or "").strip()
+    if not maid:
+        for k, v in body.items():
+            if normalize_key(str(k)) == "maid_name" and v is not None:
+                maid = str(v).strip()
+                break
+    maid = maid.replace(" ", "_")
+    for ch in _UNSAFE_FILENAME_CHARS:
+        maid = maid.replace(ch, "")
+    maid = maid.strip("._") or "applicant"
+    return f"{maid}_coe.{ext}"
 
 
 def _build_one_document(
@@ -237,6 +257,9 @@ async def generate_one(
 
     want_pdf = (output or "").lower().strip() != "docx"
     content, filename, media_type, extra_headers = _build_one_document(dt, body, want_pdf)
+    if dt == "employment-certificate":
+        ext = "pdf" if media_type == PDF_MEDIA else "docx"
+        filename = _employment_certificate_download_name(body, ext)
 
     if format and format.lower() == "json":
         return {

@@ -124,6 +124,17 @@
     "signatory_name": "{{signatory_name}}",
     "signatory_phone": "{{signatory_phone}}"
   },
+  "employment-certificate": {
+    "today_date": "{{today_date}}",
+    "maid_title": "{{maid_title}}",
+    "maid_name": "{{maid_name}}",
+    "passport_number": "{{passport_number}}",
+    "joining_date": "{{joining_date}}",
+    "client_title": "{{client_title}}",
+    "client_name": "{{client_name}}",
+    "signatory_name": "{{signatory_name}}",
+    "signatory_phone": "{{signatory_phone}}"
+  },
   "client-noc": {
     "client_name": "{{client_name}}",
     "client_nationality": "{{client_nationality}}",

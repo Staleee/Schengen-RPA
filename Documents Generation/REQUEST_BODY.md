@@ -116,7 +116,29 @@ Sample body: **samples/noc_syria_request.json**.
 
 ---
 
-## 5. GCC issuing affidavit
+## 5. Certificate of employment
+
+**POST /generate?document_type=employment-certificate**
+
+English letter (`certificate_of_employment.docx`); default output is **PDF**. Use `?format=json` for Zoho (base64 + filename). All fields are caller-supplied (including `today_date`). Response filename: **`{maid_name}_coe.pdf`** (spaces in `maid_name` become underscores; use `?output=docx` for `{maid_name}_coe.docx`). If `maid_name` is empty, **`applicant_coe.pdf`**.
+
+| Request key | Description |
+|-------------|-------------|
+| `today_date` | Issue date as printed on the certificate |
+| `maid_title` | Maid honorific (e.g. Ms., Mr.) |
+| `maid_name` | Maid full name |
+| `passport_number` | Maid passport number |
+| `joining_date` | Employment start / joining date |
+| `client_title` | Client honorific |
+| `client_name` | Client full name |
+| `signatory_name` | Signatory line |
+| `signatory_phone` | Signatory phone |
+
+Sample body: **samples/employment_certificate_request.json**.
+
+---
+
+## 6. GCC issuing affidavit
 
 **POST /generate-affidavit** — always returns **PDF** (`Content-Type: application/pdf`, filename `gcc_issuing_affidavit.pdf`); `?format=json` works like the other endpoints. There is no `?output=docx` — the template (`AFFIDAVIT-template.pdf`) is already a PDF and is filled in place.
 
